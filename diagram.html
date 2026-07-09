@@ -1,0 +1,1150 @@
+<title>Cadence — how a drum beat becomes a program</title>
+<style>
+  :root {
+    --panel: #ece8df;
+    --panel-2: #e2ddd0;
+    --panel-3: #d8d2c2;
+    --ink: #26241f;
+    --muted: #6e6a5e;
+    --line: #c9c3b4;
+    --op: #c63d2a;
+    --reg: #d0761f;
+    --imm: #b8901e;
+    --deco: #9a968a;
+    --hit-face: #faf8f2;
+    --console-bg: #201f1c;
+    --console-ink: #e8c86a;
+    --tint: 9%;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --panel: #1d1e20;
+      --panel-2: #242528;
+      --panel-3: #2d2e32;
+      --ink: #edeae2;
+      --muted: #98948a;
+      --line: #3a3b3e;
+      --op: #e2604c;
+      --reg: #e08a34;
+      --imm: #d9b23f;
+      --deco: #6f6c64;
+      --hit-face: #17181a;
+      --console-bg: #101011;
+      --console-ink: #e8c86a;
+      --tint: 14%;
+    }
+  }
+  :root[data-theme="light"] {
+    --panel: #ece8df; --panel-2: #e2ddd0; --panel-3: #d8d2c2;
+    --ink: #26241f; --muted: #6e6a5e; --line: #c9c3b4;
+    --op: #c63d2a; --reg: #d0761f; --imm: #b8901e; --deco: #9a968a;
+    --hit-face: #faf8f2; --console-bg: #201f1c; --console-ink: #e8c86a; --tint: 9%;
+  }
+  :root[data-theme="dark"] {
+    --panel: #1d1e20; --panel-2: #242528; --panel-3: #2d2e32;
+    --ink: #edeae2; --muted: #98948a; --line: #3a3b3e;
+    --op: #e2604c; --reg: #e08a34; --imm: #d9b23f; --deco: #6f6c64;
+    --hit-face: #17181a; --console-bg: #101011; --console-ink: #e8c86a; --tint: 14%;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--panel);
+    color: var(--ink);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0 20px 96px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  .display, h1, h2, .step-num, .eyebrow, button {
+    font-family: Bahnschrift, "DIN Alternate", "Franklin Gothic Medium", "Segoe UI", sans-serif;
+  }
+  code, .mono, .cell, .mn {
+    font-family: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  header { padding: 72px 0 12px; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.22em; font-size: 12px;
+    color: var(--muted); margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(44px, 8vw, 76px); line-height: 0.95; margin: 0 0 14px;
+    letter-spacing: 0.04em; text-transform: uppercase; text-wrap: balance;
+  }
+  h1 .accent { color: var(--op); }
+  .lede { font-size: 19px; max-width: 62ch; color: var(--ink); margin: 0; }
+  .lede strong { color: var(--op); }
+
+  h2 {
+    text-transform: uppercase; letter-spacing: 0.14em; font-size: 20px;
+    margin: 0 0 6px; display: flex; align-items: center; gap: 12px;
+  }
+  h2::before {
+    content: ""; width: 14px; height: 14px; border-radius: 3px;
+    background: var(--key, var(--ink)); flex: none;
+  }
+  section { margin-top: 72px; }
+  .section-note { color: var(--muted); max-width: 68ch; margin: 0 0 24px; }
+
+  /* ---- panels ---- */
+  .panel {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px;
+  }
+  .scroll { overflow-x: auto; }
+
+  /* ---- sequencer grid ---- */
+  .grid { display: grid; gap: 3px; min-width: 760px; }
+  .lane-label {
+    font-size: 12px; color: var(--muted); align-self: center;
+    padding-right: 10px; white-space: nowrap; text-align: right;
+  }
+  .cell {
+    width: 100%; aspect-ratio: 1; min-width: 30px; border-radius: 5px;
+    border: 1px solid var(--line); background: var(--panel-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: transparent; position: relative;
+  }
+  .cell.f-op  { background: color-mix(in srgb, var(--op)  var(--tint), var(--panel-2)); }
+  .cell.f-reg { background: color-mix(in srgb, var(--reg) var(--tint), var(--panel-2)); }
+  .cell.f-imm { background: color-mix(in srgb, var(--imm) var(--tint), var(--panel-2)); }
+  .cell.hit {
+    color: var(--hit-face); font-weight: 700; border-color: transparent;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25);
+  }
+  .cell.hit.f-op  { background: var(--op); }
+  .cell.hit.f-reg { background: var(--reg); }
+  .cell.hit.f-imm { background: var(--imm); }
+  .cell.hit.f-deco{ background: var(--deco); }
+  .cell.playing { outline: 3px solid var(--ink); outline-offset: 1px; }
+  .step-num {
+    font-size: 11px; color: var(--muted); text-align: center;
+    padding-bottom: 4px; font-variant-numeric: tabular-nums;
+  }
+  .field-band {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+    text-align: center; color: var(--hit-face); border-radius: 4px;
+    padding: 3px 0; margin-bottom: 6px; font-weight: 700;
+  }
+  .band-op { background: var(--op); }
+  .band-reg { background: var(--reg); }
+  .band-imm { background: var(--imm); }
+
+  .readout {
+    margin-top: 14px; padding: 10px 14px; border-radius: 7px;
+    background: var(--panel-3); border: 1px solid var(--line);
+    font-size: 14px; min-height: 42px; display: flex; align-items: center; gap: 10px;
+  }
+  .readout b { color: var(--op); }
+
+  button {
+    background: var(--ink); color: var(--panel); border: none;
+    border-radius: 7px; padding: 10px 18px; font-size: 14px;
+    text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer;
+    font-weight: 700;
+  }
+  button:hover { background: var(--op); color: var(--hit-face); }
+  button:focus-visible { outline: 3px solid var(--op); outline-offset: 2px; }
+  .toolbar { display: flex; gap: 12px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .toolbar .hint { color: var(--muted); font-size: 13px; }
+
+  /* ---- legend ---- */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+
+  /* ---- operand bit editor ---- */
+  .bits { display: grid; grid-template-columns: repeat(8, minmax(44px, 64px)); gap: 6px; }
+  .bitweight {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px;
+    color: var(--muted); text-align: center; padding-bottom: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bit {
+    aspect-ratio: 1; border-radius: 6px; border: 1px solid var(--line);
+    cursor: pointer; font-family: "Cascadia Mono", Consolas, monospace;
+    font-weight: 700; font-size: 15px; padding: 0; text-transform: none; letter-spacing: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bit.on { background: var(--imm); color: var(--hit-face); border-color: transparent;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25); }
+  .bit.off { background: color-mix(in srgb, var(--imm) var(--tint), var(--panel-2)); color: var(--muted); }
+  .bit.on:hover { background: var(--imm); filter: brightness(1.12); }
+  .bit.off:hover { background: color-mix(in srgb, var(--imm) var(--tint), var(--panel-2)); filter: brightness(1.12); }
+  .bit:focus-visible { outline: 3px solid var(--imm); outline-offset: 2px; }
+  .bit.playing { outline: 3px solid var(--ink); outline-offset: 1px; }
+  .bit-readout {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 19px; font-weight: 700;
+    margin-top: 16px; font-variant-numeric: tabular-nums;
+  }
+  .bit-readout .bin { letter-spacing: 0.12em; }
+  .bit-readout .sum { color: var(--muted); font-weight: 400; font-size: 15px; }
+  .bit-readout .val { color: var(--imm); }
+  .numin {
+    width: 84px; background: var(--panel-3); border: 1px solid var(--line);
+    color: var(--ink); border-radius: 7px; padding: 8px 10px;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 15px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .numin:focus-visible { outline: 3px solid var(--imm); outline-offset: 2px; }
+
+  /* ---- opcode banks ---- */
+  .banks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .bank { border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); overflow: hidden; }
+  .bank-head {
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    background: var(--panel-3); border-bottom: 1px solid var(--line);
+    font-weight: 700; letter-spacing: 0.06em;
+  }
+  .bank-head .chip {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px;
+    background: var(--op); color: var(--hit-face); border-radius: 4px;
+    padding: 2px 8px; font-weight: 700;
+  }
+  .bank table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .bank td { padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+  .bank tr:first-child td { border-top: none; }
+  .mini { display: inline-grid; grid-template-columns: repeat(4, 18px); gap: 2px; vertical-align: middle; }
+  .mini i {
+    width: 18px; height: 18px; border-radius: 3px; border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--op) var(--tint), var(--panel-2));
+    font-style: normal; font-size: 10px; font-weight: 700; color: transparent;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Cascadia Mono", Consolas, monospace;
+  }
+  .mini i.on { background: var(--op); border-color: transparent; color: var(--hit-face); }
+  .mn { font-weight: 700; white-space: nowrap; }
+  .eff { color: var(--muted); }
+
+  /* ---- registers ---- */
+  .regs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .regrow {
+    display: flex; align-items: center; gap: 12px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 14px; background: var(--panel-2); font-size: 14px;
+  }
+  .regrow .rname { font-weight: 700; min-width: 30px; font-family: "Cascadia Mono", Consolas, monospace; }
+  .tomseq { display: inline-flex; gap: 4px; }
+  .tom {
+    background: var(--reg); color: var(--hit-face); border-radius: 4px;
+    padding: 2px 8px; font-size: 12px; font-weight: 700;
+    font-family: "Cascadia Mono", Consolas, monospace;
+  }
+
+  /* ---- pipeline ---- */
+  .pipe { display: flex; align-items: stretch; gap: 0; min-width: 860px; }
+  .stage {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; min-width: 118px; flex: 1;
+  }
+  .stage b { display: block; font-size: 13px; letter-spacing: 0.04em; }
+  .stage small { color: var(--muted); font-size: 12px; line-height: 1.4; display: block; margin-top: 3px; }
+  .arrow { align-self: center; padding: 0 7px; color: var(--muted); font-size: 18px; flex: none; }
+  .stage.src { border-color: var(--op); border-width: 2px; }
+  .stage.dst { border-color: var(--imm); border-width: 2px; }
+
+  /* ---- program strips ---- */
+  .bar-row { display: grid; grid-template-columns: 46px 1fr 230px; gap: 12px; align-items: center; min-width: 820px; }
+  .bar-idx { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .strip { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; }
+  .strip .cell { min-width: 26px; font-size: 10px; }
+  .bar-decode { font-size: 13px; }
+  .bar-decode .mn { color: var(--ink); }
+  .bar-decode small { color: var(--muted); display: block; }
+  .program { display: flex; flex-direction: column; gap: 8px; }
+
+  /* ---- tempo editor ---- */
+  .tempo {
+    position: fixed; right: 18px; bottom: 18px; z-index: 50;
+    background: var(--panel-3); border: 1px solid var(--line); border-radius: 999px;
+    display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.28);
+  }
+  .tempo label {
+    font-family: Bahnschrift, "DIN Alternate", "Franklin Gothic Medium", "Segoe UI", sans-serif;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+    font-weight: 700; color: var(--muted);
+  }
+  .tempo input[type="range"] { width: 130px; accent-color: var(--op); }
+  .tempo input[type="range"]:focus-visible { outline: 3px solid var(--op); outline-offset: 2px; }
+  .tempo .bpm {
+    font-family: "Cascadia Mono", Consolas, monospace; font-weight: 700; font-size: 14px;
+    min-width: 62px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .tempo .mode { font-size: 11px; color: var(--muted); min-width: 52px; }
+
+  .ex-title {
+    font-family: Bahnschrift, "DIN Alternate", "Franklin Gothic Medium", "Segoe UI", sans-serif;
+    text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; font-size: 14px;
+  }
+
+  /* ---- skips & repeats ---- */
+  .seg { background: var(--panel-3); color: var(--ink); border: 1px solid var(--line); }
+  .seg.active { background: var(--ink); color: var(--panel); border-color: transparent; }
+  .bar-row.skipped .strip, .bar-row.skipped .bar-decode { opacity: 0.3; }
+  .bar-row.skipped .bar-idx { text-decoration: line-through; }
+  .bar-row.fired .bar-idx { color: var(--op); font-weight: 700; }
+  .block {
+    border-left: 4px solid var(--op); border-radius: 3px;
+    padding-left: 12px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .block-cap { color: var(--op); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+  .trace { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tp {
+    border: 1px solid var(--line); border-radius: 999px; padding: 2px 11px;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px;
+    background: var(--panel-2); font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .tp.open { border-color: var(--op); color: var(--op); font-weight: 700; }
+  .tp.halt { background: var(--ink); color: var(--panel); border-color: transparent; font-weight: 700; }
+  .tarrow { color: var(--op); font-weight: 700; cursor: help; }
+
+  .console {
+    background: var(--console-bg); color: var(--console-ink); border-radius: 8px;
+    padding: 14px 18px; font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 15px; margin-top: 16px; min-height: 52px; white-space: pre-wrap;
+  }
+  .console .prompt { opacity: 0.55; }
+
+  .callout {
+    border-left: 4px solid var(--deco); padding: 4px 0 4px 18px;
+    color: var(--muted); max-width: 66ch; margin-top: 22px; font-size: 15px;
+  }
+  .callout b { color: var(--ink); }
+
+  footer { margin-top: 88px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cell.playing { outline-width: 2px; }
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Language design · esolang</p>
+    <h1>Cadence<span class="accent">.</span></h1>
+    <p class="lede">A programming language whose source code is a <strong>drum performance</strong>.
+    There is no text format — a program is a <code>.wav</code> file of drums being played.
+    One measure of 4/4 is one instruction. This page decodes how.</p>
+  </header>
+
+  <!-- ======================= ANATOMY ======================= -->
+  <section style="--key: var(--op)">
+    <h2>Anatomy of a measure</h2>
+    <p class="section-note">Every code measure is 16 sixteenth-note steps split into three fields.
+    The bar below is a real instruction: <b>LOADI R1, 72</b> — kick opens the bar (data family, no
+    follow-up hit → <i>load immediate</i>), the high tom selects register 1, and the back half of the
+    bar plays the binary rhythm of 72. Hover any step to read its role, then press play to hear
+    the instruction.</p>
+    <div class="panel scroll">
+      <div id="anatomy"></div>
+      <div class="readout" id="anatomyReadout"><span>Hover a step…</span></div>
+      <div class="toolbar">
+        <button id="playAnatomy">▶ Play this instruction</button>
+        <span class="hint" id="anatomyHint"></span>
+      </div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--op)"></i>Opcode field (steps 1–4)</span>
+        <span><i class="swatch" style="background:var(--reg)"></i>Register field (5–8)</span>
+        <span><i class="swatch" style="background:var(--imm)"></i>Operand field (9–16)</span>
+        <span><i class="swatch" style="background:var(--deco)"></i>Decoration (ignored)</span>
+      </div>
+    </div>
+    <p class="callout"><b>Decoration is comments.</b> Closed hi-hat on steps 1–8 is ignored by the
+    parser — pure groove. A measure with no opcode instrument on step 1 is an entire bar of free
+    decoration. Programs can breathe.</p>
+  </section>
+
+  <!-- ======================= OPERAND / NUMBERS ======================= -->
+  <section style="--key: var(--imm)">
+    <h2>Numbers are rhythms</h2>
+    <p class="section-note">The operand field (steps 9–16) spells an <b>8-bit number, most
+    significant bit first</b>: <b>snare = 1</b>, <b>closed hi-hat = 0</b> — and a rest also
+    counts as 0; the hat is just the <i>audible</i> zero, easier to perform steadily. Each step
+    carries a place value, so the rhythm literally is the number. Toggle the bits below (it
+    starts on the 72 from the bar above) and hear what your number sounds like.</p>
+    <div class="panel">
+      <div class="bits" id="bitWeights"></div>
+      <div class="bits" id="bitCells" style="margin-top:4px"></div>
+      <div class="bit-readout" id="bitReadout"></div>
+      <div class="toolbar">
+        <label class="hint" for="numIn">or type a number:</label>
+        <input class="numin" type="number" id="numIn" min="0" max="255" step="1" value="72"
+               aria-label="Decimal value, 0 to 255 — sets the rhythm above">
+        <button id="playBits">▶ Play this number</button>
+        <span class="hint">literals max out at 255 — registers are unbounded; build bigger
+        values with arithmetic (LOADI small, then MUL/ADD)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= OPCODES ======================= -->
+  <section style="--key: var(--reg)">
+    <h2>The instruction set</h2>
+    <p class="section-note">An opcode is a <b>sequence of drums</b> struck in the opcode field —
+    which drums, in what order. Step 1 picks the family (kick, snare, ride, or crash); the
+    follow-up hits pick the variant, and <b>where</b> they land within steps 2–4 is the
+    performer's choice. Four families, 21 opcodes. The mini-grids show each sequence.</p>
+    <div class="banks" id="banks"></div>
+  </section>
+
+  <!-- ======================= REGISTERS ======================= -->
+  <section style="--key: var(--imm)">
+    <h2>Register addressing — the tom fill</h2>
+    <p class="section-note">A register reference is one or two tom hits read left to right.
+    Four single hits reach R1–R4; a floor-tom-led pair reaches R5–R8 — the high registers
+    literally take a mini tom fill. Destination lives on steps 5–6, source on steps 7–8.</p>
+    <div class="regs" id="regs"></div>
+  </section>
+
+  <!-- ======================= PIPELINE ======================= -->
+  <section style="--key: var(--deco)">
+    <h2>From audio to execution</h2>
+    <p class="section-note">The <code>.wav</code> is the canonical source. Every program opens with
+    four stick clicks — a count-in the decoder uses to lock tempo and grid phase, like a modem
+    handshake performed by a drummer.</p>
+    <div class="panel scroll">
+      <div class="pipe">
+        <div class="stage src"><b>beat.wav</b><small>44.1 kHz · the program itself</small></div>
+        <div class="arrow">→</div>
+        <div class="stage"><b>Count-in lock</b><small>4 clicks → tempo + downbeat phase</small></div>
+        <div class="arrow">→</div>
+        <div class="stage"><b>Onset detection</b><small>spectral flux finds every hit</small></div>
+        <div class="arrow">→</div>
+        <div class="stage"><b>Classification</b><small>which drum? template match vs. kit</small></div>
+        <div class="arrow">→</div>
+        <div class="stage"><b>Grid snap</b><small>±25% quantize to 16th steps</small></div>
+        <div class="arrow">→</div>
+        <div class="stage"><b>Measures</b><small>1 bar = 1 instruction</small></div>
+        <div class="arrow">→</div>
+        <div class="stage dst"><b>VM</b><small>8 bignum registers + stack</small></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= OPCODES IN ACTION ======================= -->
+  <section style="--key: var(--imm)">
+    <h2>The opcodes in action</h2>
+    <p class="section-note">Six mini-programs. Together with the countdown and the skip demos
+    further down, <b>every one of the 21 opcodes appears on this page</b>. Repeat blocks are
+    bracketed and indented like code — the bracket <i>is</i> the repeat sign.</p>
+
+    <div class="panel scroll" style="margin-bottom:14px">
+      <div class="toolbar" style="margin-top:0; justify-content:space-between">
+        <span class="ex-title">Data &amp; stack — swap two registers</span>
+        <button id="playData">▶ Play</button>
+      </div>
+      <div class="program" id="exData" style="margin-top:14px"></div>
+      <div class="console" id="exDataOut"></div>
+    </div>
+
+    <div class="panel scroll" style="margin-bottom:14px">
+      <div class="toolbar" style="margin-top:0; justify-content:space-between">
+        <span class="ex-title">Arithmetic — compute (3 + 4) × 5, then split its digits</span>
+        <button id="playArith">▶ Play</button>
+      </div>
+      <div class="program" id="exArith" style="margin-top:14px"></div>
+      <div class="console" id="exArithOut"></div>
+    </div>
+
+    <div class="panel scroll" style="margin-bottom:14px">
+      <div class="toolbar" style="margin-top:0; justify-content:space-between">
+        <span class="ex-title">Big numbers — literals stop at 255, registers don't</span>
+        <button id="playBig">▶ Play</button>
+      </div>
+      <div class="program" id="exBig" style="margin-top:14px"></div>
+      <div class="console" id="exBigOut"></div>
+    </div>
+
+    <div class="panel scroll" style="margin-bottom:14px">
+      <div class="toolbar" style="margin-top:0; justify-content:space-between">
+        <span class="ex-title">Comparisons — max and min of 3 and 8</span>
+        <button id="playCmp">▶ Play</button>
+      </div>
+      <div class="program" id="exCmp" style="margin-top:14px"></div>
+      <div class="console" id="exCmpOut"></div>
+    </div>
+
+    <div class="panel scroll">
+      <div class="toolbar" style="margin-top:0; justify-content:space-between">
+        <span class="ex-title">Nested loops — a 3×3 square of stars</span>
+        <button id="playLoops">▶ Play</button>
+      </div>
+      <div class="program" id="exLoops" style="margin-top:14px"></div>
+      <div class="console" id="exLoopsOut"></div>
+    </div>
+
+    <div class="panel scroll" style="margin-top:14px">
+      <div class="toolbar" style="margin-top:0; justify-content:space-between">
+        <span class="ex-title">Input — this one runs for real (no kit required)</span>
+      </div>
+      <p class="section-note" style="margin:12px 0 2px; font-size:14px">When <b>IN</b> executes,
+      the machine pauses and listens. Drum your number in binary with the buttons — snare = 1,
+      hat = 0, <b>crash submits</b> — or just type it. Either way, this three-bar program
+      squares whatever you give it.</p>
+      <div class="program" id="exIn" style="margin-top:14px"></div>
+      <div class="toolbar">
+        <button id="inSnare">Snare = 1</button>
+        <button id="inHat">Hat = 0</button>
+        <button id="inCrash">🔊 Crash — submit</button>
+        <span class="hint mono" id="inBits"></span>
+      </div>
+      <div class="toolbar">
+        <label class="hint" for="inTyped">no drums handy? type it:</label>
+        <input class="numin" type="number" id="inTyped" min="0" max="65535" step="1" placeholder="13">
+        <button id="inTypedGo">Submit</button>
+      </div>
+      <div class="console" id="exInOut"></div>
+    </div>
+  </section>
+
+  <!-- ======================= PROGRAM ======================= -->
+  <section style="--key: var(--op)">
+    <h2>A complete program: countdown</h2>
+    <p class="section-note">Seven measures that print <code>5 4 3 2 1</code>. Loops are repeat
+    signs — <b>REPEAT_WHILE R1</b> replays the block while R1 ≠ 0, exactly like a drummer reading
+    repeats off a chart. Press play to hear the score top to bottom.</p>
+    <div class="panel scroll">
+      <div class="program" id="program"></div>
+      <div class="toolbar">
+        <button id="playProgram">▶ Play the score</button>
+        <span class="hint" id="programHint"></span>
+      </div>
+    </div>
+    <div class="console" id="console"><span class="prompt">$ cadence run countdown.wav</span>
+5 4 3 2 1</div>
+    <p class="callout"><b>Hello, World!</b> is 13 characters × (LOADI + OUTC) + HALT =
+    27 measures — a 54-second drum solo whose output is a greeting. This is the correct amount
+    of ridiculous.</p>
+  </section>
+
+  <!-- ======================= SKIPS & REPEATS ======================= -->
+  <section style="--key: var(--reg)">
+    <h2>Skips &amp; repeats, visually</h2>
+    <p class="section-note">There is no <b>if</b> instruction — there are skips. A skip blinds the
+    machine for exactly one code measure. This program reads a number and prints <b>E</b> or
+    <b>O</b>: <b>SKIPNZ</b> guards the even branch, <b>SKIPZ</b> guards the odd branch, and exactly
+    one of the two loads runs. Flip the input and watch which bars survive.</p>
+    <div class="panel scroll">
+      <div class="toolbar" style="margin-top:0">
+        <button class="seg active" id="btnEven">Input: 4 (even)</button>
+        <button class="seg" id="btnOdd">Input: 7 (odd)</button>
+        <button id="playCond">▶ Play what executes</button>
+      </div>
+      <div class="program" id="condProg" style="margin-top:14px"></div>
+      <div class="console" id="condConsole"></div>
+    </div>
+
+    <p class="section-note" style="margin-top:28px">When a branch needs several bars,
+    <b>REPEAT_START 1</b> is the curly brace: a block that plays exactly once. Skipping an opener
+    skips its <i>entire block</i> — so one skip guards all four measures below.</p>
+    <div class="panel scroll">
+      <div class="program" id="bracesProg"></div>
+    </div>
+
+    <p class="section-note" style="margin-top:28px">And here's how the countdown program above
+    <i>actually executes</i>: <b>REPEAT_END</b> always jumps back to its opener, which re-reads
+    R1 — on the sixth check it sees 0 and jumps past the END to HALT.</p>
+    <div class="panel">
+      <div class="trace" id="trace"></div>
+    </div>
+  </section>
+
+  <div class="tempo" role="group" aria-label="Tempo — execution speed"
+       title="Tempo is the VM's clock speed: it changes how fast a program runs, never what it means. Slow it down to debug by ear.">
+    <label for="bpmSlider">Tempo</label>
+    <input type="range" id="bpmSlider" min="40" max="300" step="5" value="120">
+    <span class="bpm" id="bpmVal"></span>
+    <span class="mode" id="bpmMode"></span>
+  </div>
+
+  <footer>
+    Cadence · programs are drum performances · registers are arbitrary-precision
+    (two of them make a Minsky machine — that's the Turing-completeness proof) ·
+    spec v0.1, 2026
+  </footer>
+</div>
+
+<script>
+(function () {
+  // ---- language data -------------------------------------------------
+  const LANES = [
+    { id: "C",  name: "Crash" },
+    { id: "R",  name: "Ride" },
+    { id: "T1", name: "Tom 1" },
+    { id: "T2", name: "Tom 2" },
+    { id: "T3", name: "Tom 3" },
+    { id: "FT", name: "Floor Tom" },
+    { id: "S",  name: "Snare" },
+    { id: "H",  name: "Closed Hat" },
+    { id: "K",  name: "Kick" },
+  ];
+  const fieldOf = s => (s <= 4 ? "op" : s <= 8 ? "reg" : "imm");
+  const FIELD_TEXT = {
+    op:  "Opcode field — instrument at step 1 picks the family; a second hit of the same instrument at step 2/3/4 picks the variant.",
+    reg: "Register field — tom hits only. Steps 5–6 = destination, steps 7–8 = source.",
+    imm: "Operand field — an 8-bit immediate, MSB first. Snare = 1, closed hat = 0, rest = 0.",
+  };
+
+  // hits: { step: [laneId,...] }  (monophonic per step in all examples)
+  const ANATOMY = {
+    label: "LOADI R1, 72",
+    hits: { 1:"K", 5:"T1", 9:"H", 10:"S", 11:"H", 12:"H", 13:"S", 14:"H", 15:"H", 16:"H" },
+    note: {
+      1: "Kick at step 1 → data-movement family. No follow-up hit → LOADI.",
+      5: "High tom on step 5 → destination register R1.",
+    },
+  };
+  const bitNote = (s, v) => `Bit ${s - 9 + 1} of 8 — ${v === "S" ? "snare = 1" : "closed hat = an audible 0"} · 01001000 = 72`;
+
+  const BANKS = [
+    { inst: "K", name: "Kick — data", ops: [
+      [[], "LOADI rd, imm8", "rd ← immediate"],
+      [["K"], "PUSH rs", "push rs onto the stack"],
+      [["S"], "MOV rd, rs", "rd ← rs"],
+      [["R"], "POP rd", "rd ← pop stack"] ]},
+    { inst: "S", name: "Snare — arithmetic", ops: [
+      [[], "ADD rd, rs", "rd ← rd + rs"],
+      [["S"], "SUB rd, rs", "rd ← rd − rs"],
+      [["K"], "MUL rd, rs", "rd ← rd × rs"],
+      [["R"], "DIV rd, rs", "rd ← rd ÷ rs (integer)"],
+      [["C"], "MOD rd, rs", "rd ← rd mod rs"] ]},
+    { inst: "R", name: "Ride — I/O", ops: [
+      [[], "OUTN rs", "print rs as a number"],
+      [["R"], "OUTC rs", "print rs as a character"],
+      [["K"], "IN rd", "drum a number in binary; crash submits"],
+      [["S"], "TONE rs", "play rs as a MIDI note"] ]},
+    { inst: "C", name: "Crash — structure & tests", ops: [
+      [[], "REPEAT_START n", "open block, play n times"],
+      [["C"], "REPEAT_END", "close innermost block"],
+      [["K"], "REPEAT_WHILE rs", "replay block while rs ≠ 0"],
+      [["R"], "HALT", "stop"],
+      [["S"], "SKIPZ rs", "skip next bar if rs = 0"],
+      [["S","S"], "SKIPNZ rs", "skip next bar if rs ≠ 0"],
+      [["S","K"], "SKIPLT rd, rs", "skip next bar if rd < rs"],
+      [["S","R"], "SKIPGE rd, rs", "skip next bar if rd ≥ rs"] ]},
+  ];
+
+  const REGS = [
+    ["R1", ["T1"]], ["R2", ["T2"]], ["R3", ["T3"]], ["R4", ["FT"]],
+    ["R5", ["FT","T1"]], ["R6", ["FT","T2"]], ["R7", ["FT","T3"]], ["R8", ["FT","FT"]],
+  ];
+
+  const PROGRAM = [
+    { m: "LOADI R1, 5", d: "R1 ← 5 (operand 00000101)",
+      hits: { 1:"K", 5:"T1", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"S",15:"H",16:"S" } },
+    { m: "LOADI R2, 1", d: "R2 ← 1 — the decrement",
+      hits: { 1:"K", 5:"T2", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"H",16:"S" } },
+    { m: "REPEAT_WHILE R1", d: "repeat sign: loop while R1 ≠ 0", cap: "while R1 ≠ 0",
+      hits: { 1:"C", 3:"K", 5:"T1" } },
+    { m: "OUTN R1", d: "print R1",
+      hits: { 1:"R", 5:"T1" } },
+    { m: "SUB R1, R2", d: "R1 ← R1 − R2",
+      hits: { 1:"S", 2:"S", 5:"T1", 7:"T2" } },
+    { m: "REPEAT_END", d: "back to the repeat sign",
+      hits: { 1:"C", 2:"C" } },
+    { m: "HALT", d: "crash into the ride — stop",
+      hits: { 1:"C", 4:"R" } },
+  ];
+
+  // ---- render: full anatomy grid --------------------------------------
+  const anatomyEl = document.getElementById("anatomy");
+  const readout = document.getElementById("anatomyReadout");
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  grid.style.gridTemplateColumns = "92px repeat(16, 1fr)";
+
+  // field bands row
+  grid.appendChild(el("div", ""));
+  addBand("band-op", 4, "Opcode");
+  addBand("band-reg", 4, "Registers");
+  addBand("band-imm", 8, "Operand · 01001000 = 72");
+  function addBand(cls, span, text) {
+    const b = el("div", text); b.className = "field-band " + cls;
+    b.style.gridColumn = "span " + span; grid.appendChild(b);
+  }
+  // step numbers
+  grid.appendChild(el("div", ""));
+  for (let s = 1; s <= 16; s++) { const n = el("div", s); n.className = "step-num"; grid.appendChild(n); }
+  // lanes
+  const anatomyCells = {}; // step -> [cells]
+  for (const lane of LANES) {
+    const lbl = el("div", lane.name); lbl.className = "lane-label"; grid.appendChild(lbl);
+    for (let s = 1; s <= 16; s++) {
+      const c = el("div", "");
+      const f = fieldOf(s);
+      c.className = "cell f-" + f;
+      if (ANATOMY.hits[s] === lane.id) { c.classList.add("hit"); c.textContent = lane.id; }
+      c.tabIndex = 0;
+      c.addEventListener("mouseenter", () => showStep(s));
+      c.addEventListener("focus", () => showStep(s));
+      (anatomyCells[s] = anatomyCells[s] || []).push(c);
+      grid.appendChild(c);
+    }
+  }
+  anatomyEl.appendChild(grid);
+
+  function showStep(s) {
+    const f = fieldOf(s);
+    const v = ANATOMY.hits[s];
+    let extra = ANATOMY.note[s] || (f === "imm" ? bitNote(s, v) : v ? "" : "Rest.");
+    readout.innerHTML = "<b>Step " + s + "</b><span>" + FIELD_TEXT[f] + (extra ? " &nbsp;·&nbsp; " + extra : "") + "</span>";
+  }
+
+  // ---- render: opcode banks -------------------------------------------
+  const banksEl = document.getElementById("banks");
+  for (const bank of BANKS) {
+    const card = document.createElement("div"); card.className = "bank";
+    const head = document.createElement("div"); head.className = "bank-head";
+    head.innerHTML = '<span class="chip">' + bank.inst + "</span>" + bank.name;
+    card.appendChild(head);
+    const t = document.createElement("table"); const tb = document.createElement("tbody");
+    for (const [seq, mn, eff] of bank.ops) {
+      const tr = document.createElement("tr");
+      const hits = [bank.inst, ...seq];
+      const mini = '<span class="mini">' + [0,1,2,3].map(i =>
+        '<i class="' + (i < hits.length ? "on" : "") + '">' + (hits[i] || "") + "</i>").join("") + "</span>";
+      tr.innerHTML = "<td>" + mini + '</td><td class="mn">' + mn + '</td><td class="eff">' + eff + "</td>";
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb); card.appendChild(t); banksEl.appendChild(card);
+  }
+
+  // ---- render: registers ----------------------------------------------
+  const regsEl = document.getElementById("regs");
+  for (const [name, seq] of REGS) {
+    const r = document.createElement("div"); r.className = "regrow";
+    r.innerHTML = '<span class="rname">' + name + '</span><span class="tomseq">' +
+      seq.map(t => '<span class="tom">' + t + "</span>").join("") + "</span>";
+    regsEl.appendChild(r);
+  }
+
+  // ---- render: program strips ------------------------------------------
+  function buildBarRow(bar, i) {
+    const row = document.createElement("div"); row.className = "bar-row";
+    const idx = el("div", "bar " + (i + 1)); idx.className = "bar-idx";
+    const strip = document.createElement("div"); strip.className = "strip";
+    const cells = {};
+    for (let s = 1; s <= 16; s++) {
+      const c = el("div", "");
+      c.className = "cell f-" + fieldOf(s);
+      if (bar.hits[s]) { c.classList.add("hit"); c.textContent = bar.hits[s]; }
+      cells[s] = c; strip.appendChild(c);
+    }
+    const dec = document.createElement("div"); dec.className = "bar-decode";
+    dec.innerHTML = '<span class="mn">' + bar.m + "</span>" + (bar.d ? "<small>" + bar.d + "</small>" : "");
+    row.appendChild(idx); row.appendChild(strip); row.appendChild(dec);
+    return { row, cells };
+  }
+  function renderBarRows(containerEl, bars) {
+    const rows = [], cellSets = [];
+    bars.forEach((bar, i) => {
+      const { row, cells } = buildBarRow(bar, i);
+      rows.push(row); cellSets.push(cells);
+      containerEl.appendChild(row);
+    });
+    return { rows, cellSets };
+  }
+  // Like renderBarRows, but REPEAT_START/REPEAT_WHILE … REPEAT_END get wrapped
+  // in nested .block brackets — the bracket IS the repeat sign.
+  function renderProgram(containerEl, bars) {
+    const rows = [], cellSets = [];
+    const stack = [containerEl];
+    bars.forEach((bar, i) => {
+      const { row, cells } = buildBarRow(bar, i);
+      rows.push(row); cellSets.push(cells);
+      const isOpen = /^REPEAT_(START|WHILE)/.test(bar.m);
+      const isClose = /^REPEAT_END/.test(bar.m);
+      if (isOpen) {
+        const blk = document.createElement("div"); blk.className = "block";
+        if (bar.cap) { const c = el("div", bar.cap); c.className = "block-cap"; blk.appendChild(c); }
+        stack[stack.length - 1].appendChild(blk);
+        stack.push(blk);
+        blk.appendChild(row);
+      } else {
+        stack[stack.length - 1].appendChild(row);
+        if (isClose && stack.length > 1) stack.pop();
+      }
+    });
+    return { rows, cellSets };
+  }
+  const progCells = renderProgram(document.getElementById("program"), PROGRAM).cellSets;
+
+  // ---- render: opcodes in action -----------------------------------------
+  const EX_DATA = [
+    { m: "LOADI R1, 7", d: "R1 ← 7",
+      hits: { 1:"K",5:"T1",9:"H",10:"H",11:"H",12:"H",13:"H",14:"S",15:"S",16:"S" } },
+    { m: "LOADI R2, 9", d: "R2 ← 9",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"S",14:"H",15:"H",16:"S" } },
+    { m: "PUSH R1", d: "stack: [7]", hits: { 1:"K",2:"K",5:"T1" } },
+    { m: "PUSH R2", d: "stack: [7, 9]", hits: { 1:"K",2:"K",5:"T2" } },
+    { m: "POP R1", d: "R1 ← 9 — pop takes the top", hits: { 1:"K",3:"R",5:"T1" } },
+    { m: "POP R2", d: "R2 ← 7 — swapped", hits: { 1:"K",3:"R",5:"T2" } },
+    { m: "OUTN R1", d: "prints 9", hits: { 1:"R",5:"T1" } },
+    { m: "OUTN R2", d: "prints 7", hits: { 1:"R",5:"T2" } },
+  ];
+  const EX_ARITH = [
+    { m: "LOADI R1, 3", d: "R1 ← 3",
+      hits: { 1:"K",5:"T1",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
+    { m: "LOADI R2, 4", d: "R2 ← 4",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"H",14:"S",15:"H",16:"H" } },
+    { m: "ADD R1, R2", d: "R1 = 7", hits: { 1:"S",5:"T1",7:"T2" } },
+    { m: "LOADI R2, 5", d: "reuse R2 as scratch",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"H",14:"S",15:"H",16:"S" } },
+    { m: "MUL R1, R2", d: "R1 = 35", hits: { 1:"S",3:"K",5:"T1",7:"T2" } },
+    { m: "OUTN R1", d: "prints 35", hits: { 1:"R",5:"T1" } },
+    { m: "MOV R3, R1", d: "copy — MOD is about to eat it", hits: { 1:"K",3:"S",5:"T3",7:"T1" } },
+    { m: "LOADI R2, 10", d: "R2 ← 10",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"S",14:"H",15:"S",16:"H" } },
+    { m: "DIV R1, R2", d: "R1 = 3 — the tens digit", hits: { 1:"S",3:"R",5:"T1",7:"T2" } },
+    { m: "MOD R3, R2", d: "R3 = 5 — the ones digit", hits: { 1:"S",3:"C",5:"T3",7:"T2" } },
+    { m: "OUTN R1", d: "prints 3", hits: { 1:"R",5:"T1" } },
+    { m: "OUTN R3", d: "prints 5", hits: { 1:"R",5:"T3" } },
+  ];
+  const EX_CMP = [
+    { m: "LOADI R1, 3", d: "R1 ← 3",
+      hits: { 1:"K",5:"T1",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
+    { m: "LOADI R2, 8", d: "R2 ← 8",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"S",14:"H",15:"H",16:"H" } },
+    { m: "SKIPGE R1, R2", d: "already R1 ≥ R2? skip the fix — 3 < 8, so no skip",
+      hits: { 1:"C",2:"S",3:"R",5:"T1",7:"T2" } },
+    { m: "MOV R1, R2", d: "R1 ← 8", hits: { 1:"K",3:"S",5:"T1",7:"T2" } },
+    { m: "OUTN R1", d: "prints the max: 8", hits: { 1:"R",5:"T1" } },
+    { m: "LOADI R3, 3", d: "R3 ← 3",
+      hits: { 1:"K",5:"T3",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
+    { m: "LOADI R4, 8", d: "R4 ← 8",
+      hits: { 1:"K",5:"FT",9:"H",10:"H",11:"H",12:"H",13:"S",14:"H",15:"H",16:"H" } },
+    { m: "SKIPLT R3, R4", d: "already R3 < R4? skip the fix — 3 < 8: SKIP!",
+      hits: { 1:"C",2:"S",3:"K",5:"T3",7:"FT" } },
+    { m: "MOV R3, R4", d: "skipped for these inputs", hits: { 1:"K",3:"S",5:"T3",7:"FT" } },
+    { m: "OUTN R3", d: "prints the min: 3", hits: { 1:"R",5:"T3" } },
+  ];
+  const EX_LOOPS = [
+    { m: "LOADI R1, 42", d: "'*'",
+      hits: { 1:"K",5:"T1",9:"H",10:"H",11:"S",12:"H",13:"S",14:"H",15:"S",16:"H" } },
+    { m: "LOADI R2, 10", d: "newline",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"S",14:"H",15:"S",16:"H" } },
+    { m: "REPEAT_START 3", d: "count in the operand field", cap: "outer × 3 — rows",
+      hits: { 1:"C",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
+    { m: "REPEAT_START 3", d: "", cap: "inner × 3 — columns",
+      hits: { 1:"C",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
+    { m: "OUTC R1", d: "prints *", hits: { 1:"R",2:"R",5:"T1" } },
+    { m: "REPEAT_END", d: "close the inner block", hits: { 1:"C",2:"C" } },
+    { m: "OUTC R2", d: "end the row", hits: { 1:"R",2:"R",5:"T2" } },
+    { m: "REPEAT_END", d: "close the outer block", hits: { 1:"C",2:"C" } },
+    { m: "HALT", d: "", hits: { 1:"C",4:"R" } },
+  ];
+  const EX_BIG = [
+    { m: "LOADI R1, 250", d: "the biggest chunk one bar can say",
+      hits: { 1:"K",5:"T1",9:"S",10:"S",11:"S",12:"S",13:"S",14:"H",15:"S",16:"H" } },
+    { m: "LOADI R2, 4", d: "R2 ← 4",
+      hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"H",14:"S",15:"H",16:"H" } },
+    { m: "MUL R1, R2", d: "R1 = 1,000 — already past 8 bits", hits: { 1:"S",3:"K",5:"T1",7:"T2" } },
+    { m: "LOADI R2, 70", d: "R2 ← 70",
+      hits: { 1:"K",5:"T2",9:"H",10:"S",11:"H",12:"H",13:"H",14:"S",15:"S",16:"H" } },
+    { m: "MUL R1, R2", d: "R1 = 70,000 — registers are unbounded", hits: { 1:"S",3:"K",5:"T1",7:"T2" } },
+    { m: "OUTN R1", d: "prints 70000", hits: { 1:"R",5:"T1" } },
+  ];
+  const EX_IN = [
+    { m: "IN R1", d: "pause — read a number", hits: { 1:"R",3:"K",5:"T1" } },
+    { m: "MUL R1, R1", d: "square it (both operands can be the same register)",
+      hits: { 1:"S",3:"K",5:"T1",7:"T1" } },
+    { m: "OUTN R1", d: "print", hits: { 1:"R",5:"T1" } },
+  ];
+  const exDataR  = renderProgram(document.getElementById("exData"), EX_DATA);
+  const exArithR = renderProgram(document.getElementById("exArith"), EX_ARITH);
+  const exCmpR   = renderProgram(document.getElementById("exCmp"), EX_CMP);
+  const exLoopsR = renderProgram(document.getElementById("exLoops"), EX_LOOPS);
+  const exBigR   = renderProgram(document.getElementById("exBig"), EX_BIG);
+  renderProgram(document.getElementById("exIn"), EX_IN);
+  exCmpR.rows[7].classList.add("fired");   // SKIPLT fires…
+  exCmpR.rows[8].classList.add("skipped"); // …and blinds the MOV
+  document.getElementById("exBigOut").innerHTML = '<span class="prompt">output:</span> 70000';
+  document.getElementById("exDataOut").innerHTML  = '<span class="prompt">output:</span> 9 7';
+  document.getElementById("exArithOut").innerHTML = '<span class="prompt">output:</span> 35 3 5';
+  document.getElementById("exCmpOut").innerHTML   = '<span class="prompt">output:</span> 8 3';
+  document.getElementById("exLoopsOut").innerHTML = '<span class="prompt">output:</span>\n***\n***\n***';
+
+  function el(tag, text) { const e = document.createElement(tag); e.textContent = text; return e; }
+
+  // ---- render: skips & repeats ------------------------------------------
+  const COND = [
+    { m: "IN R1", d: "read a number (the toggle above)", hits: { 1:"R", 3:"K", 5:"T1" } },
+    { m: "LOADI R2, 2", d: "R2 ← 2",
+      hits: { 1:"K", 5:"T2", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"H" } },
+    { m: "MOD R1, R2", d: "R1 ← R1 mod 2 (0 = even, 1 = odd)",
+      hits: { 1:"S", 3:"C", 5:"T1", 7:"T2" } },
+    { m: "SKIPNZ R1", d: "odd? skip the next bar", hits: { 1:"C", 2:"S", 3:"S", 5:"T1" } },
+    { m: "LOADI R3, 69", d: "the even branch: 'E'",
+      hits: { 1:"K", 5:"T3", 9:"H",10:"S",11:"H",12:"H",13:"H",14:"S",15:"H",16:"S" } },
+    { m: "SKIPZ R1", d: "even? skip the next bar", hits: { 1:"C", 3:"S", 5:"T1" } },
+    { m: "LOADI R3, 79", d: "the odd branch: 'O'",
+      hits: { 1:"K", 5:"T3", 9:"H",10:"S",11:"H",12:"H",13:"S",14:"S",15:"S",16:"S" } },
+    { m: "OUTC R3", d: "exactly one branch ran", hits: { 1:"R", 2:"R", 5:"T3" } },
+  ];
+  const condRender = renderBarRows(document.getElementById("condProg"), COND);
+  const condConsole = document.getElementById("condConsole");
+  let condOdd = false;
+  function applyParity() {
+    const skippedIdx = condOdd ? 4 : 6; // 0-based: 'E' load or 'O' load
+    const firedIdx = condOdd ? 3 : 5;   // which skip pulled the trigger
+    condRender.rows.forEach((row, i) => {
+      row.classList.toggle("skipped", i === skippedIdx);
+      row.classList.toggle("fired", i === firedIdx);
+    });
+    condConsole.innerHTML = '<span class="prompt">$ cadence run evenodd.wav</span>\nin: ' +
+      (condOdd ? "7" : "4") + "\n" + (condOdd ? "O" : "E");
+    document.getElementById("btnEven").classList.toggle("active", !condOdd);
+    document.getElementById("btnOdd").classList.toggle("active", condOdd);
+  }
+  document.getElementById("btnEven").addEventListener("click", () => { condOdd = false; applyParity(); });
+  document.getElementById("btnOdd").addEventListener("click", () => { condOdd = true; applyParity(); });
+  applyParity();
+
+  const BRACES = [
+    { m: "SKIPZ R1", d: "R1 = 0 → skip the whole block", hits: { 1:"C", 3:"S", 5:"T1" } },
+    { m: "REPEAT_START 1", d: "{ — a block that plays once", cap: "one skip jumps this whole block",
+      hits: { 1:"C", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"H",16:"S" } },
+    { m: "OUTN R1", d: "", hits: { 1:"R", 5:"T1" } },
+    { m: "TONE R1", d: "", hits: { 1:"R", 2:"S", 5:"T1" } },
+    { m: "REPEAT_END", d: "}", hits: { 1:"C", 2:"C" } },
+  ];
+  renderProgram(document.getElementById("bracesProg"), BRACES);
+
+  const traceEl = document.getElementById("trace");
+  const seq = [1, 2];
+  for (let i = 0; i < 5; i++) seq.push(3, 4, 5, 6);
+  seq.push(3, 7);
+  let prev = null;
+  for (const b of seq) {
+    if (prev === 6 && b === 3) {
+      const a = el("span", "↩"); a.className = "tarrow";
+      a.title = "REPEAT_END jumps back to its opener"; traceEl.appendChild(a);
+    }
+    if (prev === 3 && b === 7) {
+      const a = el("span", "⇥"); a.className = "tarrow";
+      a.title = "R1 = 0 → jump past the END"; traceEl.appendChild(a);
+    }
+    const p = el("span", "bar " + b);
+    p.className = "tp" + (b === 3 ? " open" : b === 7 ? " halt" : "");
+    if (b === 3) p.title = "REPEAT_WHILE R1 — re-checks the register";
+    traceEl.appendChild(p);
+    prev = b;
+  }
+
+  // ---- audio engine -----------------------------------------------------
+  let ctx = null;
+  const AC = () => (ctx = ctx || new (window.AudioContext || window.webkitAudioContext)());
+
+  function noise(t, dur, filterType, freq, gain, ac) {
+    const len = Math.ceil(ac.sampleRate * dur);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const f = ac.createBiquadFilter(); f.type = filterType; f.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f); f.connect(g); g.connect(ac.destination);
+    src.start(t); src.stop(t + dur);
+  }
+  function thump(t, f0, f1, dur, gain, ac) {
+    const o = ac.createOscillator(); o.type = "sine";
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.8);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + dur);
+  }
+  const VOICES = {
+    K:  (t, ac) => thump(t, 140, 42, 0.32, 0.9, ac),
+    S:  (t, ac) => { noise(t, 0.16, "bandpass", 1800, 0.55, ac); thump(t, 210, 160, 0.09, 0.3, ac); },
+    H:  (t, ac) => noise(t, 0.05, "highpass", 7500, 0.28, ac),
+    T1: (t, ac) => thump(t, 260, 190, 0.22, 0.55, ac),
+    T2: (t, ac) => thump(t, 200, 145, 0.24, 0.55, ac),
+    T3: (t, ac) => thump(t, 155, 110, 0.26, 0.55, ac),
+    FT: (t, ac) => thump(t, 115, 78, 0.3, 0.6, ac),
+    C:  (t, ac) => noise(t, 0.9, "highpass", 4200, 0.32, ac),
+    R:  (t, ac) => { noise(t, 0.4, "highpass", 5200, 0.16, ac); noise(t, 0.12, "bandpass", 3000, 0.14, ac); },
+  };
+
+  // Tempo = the VM's clock speed. It scales execution, never meaning.
+  let bpm = 120;
+  const stepDur = () => 60 / bpm / 4; // one 16th-note step, in seconds
+  let playing = false;
+
+  function playBars(bars, cellSets, done) {
+    if (playing) return;
+    playing = true;
+    const STEP = stepDur(); // locked in for this run
+    const ac = AC();
+    if (ac.state === "suspended") ac.resume();
+    const t0 = ac.currentTime + 0.08;
+    const timers = [];
+    bars.forEach((bar, b) => {
+      for (let s = 1; s <= 16; s++) {
+        const when = t0 + (b * 16 + s - 1) * STEP;
+        const v = bar.hits[s];
+        if (v && VOICES[v]) VOICES[v](when, ac);
+        timers.push(setTimeout(() => {
+          document.querySelectorAll(".cell.playing").forEach(c => c.classList.remove("playing"));
+          const set = cellSets[b][s];
+          (Array.isArray(set) ? set : [set]).forEach(c => c && c.classList.add("playing"));
+        }, (when - ac.currentTime) * 1000));
+      }
+    });
+    const total = (bars.length * 16 * STEP + 0.35) * 1000;
+    setTimeout(() => {
+      document.querySelectorAll(".cell.playing").forEach(c => c.classList.remove("playing"));
+      playing = false;
+      if (done) done();
+    }, total);
+  }
+
+  // ---- operand bit editor -------------------------------------------------
+  const bits = [0, 1, 0, 0, 1, 0, 0, 0]; // 72, matching the anatomy bar
+  const bitWeightsEl = document.getElementById("bitWeights");
+  const bitCellsEl = document.getElementById("bitCells");
+  const bitReadout = document.getElementById("bitReadout");
+  const bitBtns = [];
+  bits.forEach((_, i) => {
+    const w = el("div", String(2 ** (7 - i))); w.className = "bitweight";
+    bitWeightsEl.appendChild(w);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "bit";
+    b.addEventListener("click", () => { bits[i] = 1 - bits[i]; updateBits(); });
+    bitBtns.push(b); bitCellsEl.appendChild(b);
+  });
+  const numIn = document.getElementById("numIn");
+  function updateBits(syncInput) {
+    bits.forEach((v, i) => {
+      const b = bitBtns[i];
+      b.classList.toggle("on", v === 1);
+      b.classList.toggle("off", v === 0);
+      b.textContent = v ? "S" : "H";
+      b.title = "Step " + (9 + i) + " — " + (v ? "snare = 1" : "closed hat = 0") +
+        " (worth " + 2 ** (7 - i) + ")";
+    });
+    const value = bits.reduce((acc, v) => acc * 2 + v, 0);
+    const parts = bits.map((v, i) => (v ? 2 ** (7 - i) : 0)).filter(Boolean);
+    const sum = parts.length > 1 ? " = " + parts.join(" + ") : "";
+    bitReadout.innerHTML = '<span class="bin">' + bits.join("") + "</span>" +
+      '<span class="sum">' + sum + " =</span> " + '<span class="val">' + value + "</span>";
+    if (syncInput !== false) numIn.value = value;
+  }
+  numIn.addEventListener("input", () => {
+    if (numIn.value === "") return; // don't fight the user mid-edit
+    const v = Math.max(0, Math.min(255, Math.floor(+numIn.value) || 0));
+    for (let i = 0; i < 8; i++) bits[i] = (v >> (7 - i)) & 1;
+    updateBits(false);
+  });
+  updateBits();
+  document.getElementById("playBits").addEventListener("click", () => {
+    if (playing) return;
+    playing = true;
+    const STEP = stepDur();
+    const ac = AC();
+    if (ac.state === "suspended") ac.resume();
+    const t0 = ac.currentTime + 0.05;
+    bits.forEach((v, i) => {
+      VOICES[v ? "S" : "H"](t0 + i * STEP, ac);
+      setTimeout(() => {
+        bitBtns.forEach(b => b.classList.remove("playing"));
+        bitBtns[i].classList.add("playing");
+      }, (t0 + i * STEP - ac.currentTime) * 1000);
+    });
+    setTimeout(() => {
+      bitBtns.forEach(b => b.classList.remove("playing"));
+      playing = false;
+    }, (8 * STEP + 0.3) * 1000);
+  });
+
+  // ---- tempo editor -------------------------------------------------------
+  const bpmSlider = document.getElementById("bpmSlider");
+  const bpmVal = document.getElementById("bpmVal");
+  const bpmMode = document.getElementById("bpmMode");
+  function updateTempo() {
+    bpm = +bpmSlider.value || 120;
+    bpmVal.textContent = "♩ = " + bpm;
+    bpmMode.textContent = bpm <= 70 ? "debug" : bpm <= 160 ? "normal" : "sprint";
+    document.getElementById("anatomyHint").textContent =
+      "♩ = " + bpm + " · one bar · snare = 1, closed hat = an audible 0";
+    const secs = Math.round(PROGRAM.length * 16 * stepDur());
+    document.getElementById("programHint").textContent =
+      PROGRAM.length + " bars · " + secs + " seconds at ♩ = " + bpm;
+  }
+  bpmSlider.addEventListener("input", updateTempo);
+  updateTempo();
+
+  document.getElementById("playAnatomy").addEventListener("click", () =>
+    playBars([ANATOMY], [anatomyCells]));
+
+  document.getElementById("playProgram").addEventListener("click", () =>
+    playBars(PROGRAM, progCells));
+
+  // ---- input demo ---------------------------------------------------------
+  const inBitsEl = document.getElementById("inBits");
+  const exInOut = document.getElementById("exInOut");
+  const inTyped = document.getElementById("inTyped");
+  let inBitStr = "";
+  function oneShot(sym) {
+    const ac = AC();
+    if (ac.state === "suspended") ac.resume();
+    VOICES[sym](ac.currentTime + 0.02, ac);
+  }
+  function refreshInBits() {
+    inBitsEl.textContent = inBitStr
+      ? "so far: " + inBitStr + " (" + parseInt(inBitStr, 2) + ")"
+      : "so far: — (crash alone submits 0)";
+  }
+  function runInputDemo(v, how) {
+    exInOut.innerHTML = '<span class="prompt">$ cadence run square.wav</span>\nin: ' +
+      v + "  (" + how + ")\n" + (v * v);
+  }
+  exInOut.innerHTML = '<span class="prompt">$ cadence run square.wav</span>\nwaiting for input…';
+  refreshInBits();
+  document.getElementById("inSnare").addEventListener("click", () => {
+    if (inBitStr.length >= 16) return; // demo caps at 16 bits
+    inBitStr += "1"; oneShot("S"); refreshInBits();
+  });
+  document.getElementById("inHat").addEventListener("click", () => {
+    if (inBitStr.length >= 16) return;
+    inBitStr += "0"; oneShot("H"); refreshInBits();
+  });
+  document.getElementById("inCrash").addEventListener("click", () => {
+    oneShot("C");
+    runInputDemo(parseInt(inBitStr || "0", 2), inBitStr ? "drummed " + inBitStr : "drummed nothing = 0");
+    inBitStr = ""; refreshInBits();
+  });
+  function submitTyped() {
+    if (inTyped.value === "") return;
+    const v = Math.max(0, Math.min(65535, Math.floor(+inTyped.value) || 0));
+    inTyped.value = v;
+    runInputDemo(v, "typed");
+  }
+  document.getElementById("inTypedGo").addEventListener("click", submitTyped);
+  inTyped.addEventListener("keydown", e => { if (e.key === "Enter") submitTyped(); });
+
+  document.getElementById("playBig").addEventListener("click", () => playBars(EX_BIG, exBigR.cellSets));
+  document.getElementById("playData").addEventListener("click", () => playBars(EX_DATA, exDataR.cellSets));
+  document.getElementById("playArith").addEventListener("click", () => playBars(EX_ARITH, exArithR.cellSets));
+  document.getElementById("playCmp").addEventListener("click", () => playBars(EX_CMP, exCmpR.cellSets));
+  document.getElementById("playLoops").addEventListener("click", () => playBars(EX_LOOPS, exLoopsR.cellSets));
+
+  document.getElementById("playCond").addEventListener("click", () => {
+    const skippedIdx = condOdd ? 4 : 6;
+    const bars = [], sets = [];
+    COND.forEach((bar, i) => {
+      if (i !== skippedIdx) { bars.push(bar); sets.push(condRender.cellSets[i]); }
+    });
+    playBars(bars, sets);
+  });
+})();
+</script>
