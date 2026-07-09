@@ -286,6 +286,12 @@
   .bar-row.skipped .strip, .bar-row.skipped .bar-decode { opacity: 0.3; }
   .bar-row.skipped .bar-idx { text-decoration: line-through; }
   .bar-row.fired .bar-idx { color: var(--op); font-weight: 700; }
+  .bar-row.now { background: color-mix(in srgb, var(--op) 10%, transparent); border-radius: 8px; }
+  .bar-row.now .bar-idx { color: var(--op); font-weight: 700; }
+  .console .cursor { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:disabled:hover { background: var(--ink); color: var(--panel); }
   .block {
     border-left: 4px solid var(--op); border-radius: 3px;
     padding-left: 12px; display: flex; flex-direction: column; gap: 8px;
@@ -323,6 +329,15 @@
 </style>
 
 <div class="wrap">
+  <noscript>
+    <div style="border: 2px solid #c63d2a; border-radius: 10px; padding: 14px 18px; margin: 24px 0;
+                font-size: 15px; line-height: 1.5;">
+      <b>This page is built with JavaScript, and it isn't running here.</b><br>
+      File previews (OneDrive, Files/Quick Look, email attachments) usually don't execute
+      scripts — that's why the sections below look empty. Open this file in a real browser
+      (Safari, Chrome, Edge) and everything will appear.
+    </div>
+  </noscript>
   <header>
     <p class="eyebrow">Language design · esolang</p>
     <h1>Cadence<span class="accent">.</span></h1>
@@ -470,7 +485,7 @@
 
     <div class="panel scroll">
       <div class="toolbar" style="margin-top:0; justify-content:space-between">
-        <span class="ex-title">Nested loops — a 3×3 square of stars</span>
+        <span class="ex-title">Nested loops — a 2×2 square of stars</span>
         <button id="playLoops">▶ Play</button>
       </div>
       <div class="program" id="exLoops" style="margin-top:14px"></div>
@@ -504,9 +519,10 @@
   <!-- ======================= PROGRAM ======================= -->
   <section style="--key: var(--op)">
     <h2>A complete program: countdown</h2>
-    <p class="section-note">Seven measures that print <code>5 4 3 2 1</code>. Loops are repeat
-    signs — <b>REPEAT_WHILE R1</b> replays the block while R1 ≠ 0, exactly like a drummer reading
-    repeats off a chart. Press play to hear the score top to bottom.</p>
+    <p class="section-note">Seven written measures that print <code>3 2 1</code>. Loops are repeat
+    signs — <b>REPEAT_WHILE R1</b> replays its block while R1 ≠ 0, exactly like a drummer reading
+    repeats off a chart. Pressing play performs the <i>execution</i>, not the score: the loop
+    comes back around until R1 hits zero, and the console fills in as it runs.</p>
     <div class="panel scroll">
       <div class="program" id="program"></div>
       <div class="toolbar">
@@ -515,7 +531,7 @@
       </div>
     </div>
     <div class="console" id="console"><span class="prompt">$ cadence run countdown.wav</span>
-5 4 3 2 1</div>
+waiting — press play</div>
     <p class="callout"><b>Hello, World!</b> is 13 characters × (LOADI + OUTC) + HALT =
     27 measures — a 54-second drum solo whose output is a greeting. This is the correct amount
     of ridiculous.</p>
@@ -547,9 +563,26 @@
 
     <p class="section-note" style="margin-top:28px">And here's how the countdown program above
     <i>actually executes</i>: <b>REPEAT_END</b> always jumps back to its opener, which re-reads
-    R1 — on the sixth check it sees 0 and jumps past the END to HALT.</p>
+    R1 — on the fourth check it sees 0 and jumps past the END to HALT.</p>
     <div class="panel">
       <div class="trace" id="trace"></div>
+    </div>
+  </section>
+
+  <!-- ======================= POC: HI! ======================= -->
+  <section style="--key: var(--op)">
+    <h2>Proof of concept — Hi!</h2>
+    <p class="section-note">The whole idea, end to end: seven measures of drums that print
+    <b>Hi!</b>. Press run and watch the console — each character appears at the exact moment
+    the playhead reaches its <b>OUTC</b> bar, at whatever speed the tempo dial says.
+    The output is <i>performed</i>.</p>
+    <div class="panel scroll">
+      <div class="toolbar" style="margin-top:0">
+        <button id="runPoc">▶ Run hi.wav</button>
+        <span class="hint" id="pocHint"></span>
+      </div>
+      <div class="program" id="pocProg" style="margin-top:14px"></div>
+      <div class="console" id="pocOut"></div>
     </div>
   </section>
 
@@ -634,8 +667,8 @@
   ];
 
   const PROGRAM = [
-    { m: "LOADI R1, 5", d: "R1 ← 5 (operand 00000101)",
-      hits: { 1:"K", 5:"T1", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"S",15:"H",16:"S" } },
+    { m: "LOADI R1, 3", d: "R1 ← 3 (operand 00000011)",
+      hits: { 1:"K", 5:"T1", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
     { m: "LOADI R2, 1", d: "R2 ← 1 — the decrement",
       hits: { 1:"K", 5:"T2", 9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"H",16:"S" } },
     { m: "REPEAT_WHILE R1", d: "repeat sign: loop while R1 ≠ 0", cap: "while R1 ≠ 0",
@@ -771,7 +804,104 @@
     });
     return { rows, cellSets };
   }
-  const progCells = renderProgram(document.getElementById("program"), PROGRAM).cellSets;
+  const progR = renderProgram(document.getElementById("program"), PROGRAM);
+
+  // ---- the mini-VM: honest execution — loops loop, skips skip -------------
+  function matchBlocks(bars) {
+    const end = {}, start = {}, st = [];
+    bars.forEach((bar, i) => {
+      if (/^REPEAT_(START|WHILE)/.test(bar.m)) st.push(i);
+      else if (/^REPEAT_END/.test(bar.m)) { const o = st.pop(); end[o] = i; start[i] = o; }
+    });
+    return { end, start };
+  }
+  function execute(bars, input) {
+    const { end, start } = matchBlocks(bars);
+    const R = {}, stack = [], frames = [], events = [];
+    const val = r => R[r] || 0;
+    let pc = 0, guard = 0;
+    while (pc < bars.length && guard++ < 300) {
+      const ev = { bar: pc };
+      events.push(ev);
+      const p = bars[pc].m.replace(/,/g, "").split(/\s+/);
+      const op = p[0], a = p[1], b = p[2];
+      let next = pc + 1;
+      const skipIf = cond => {
+        if (!cond) return;
+        const tgt = pc + 1; // skipping an opener skips its whole block
+        next = (bars[tgt] && /^REPEAT_(START|WHILE)/.test(bars[tgt].m)) ? end[tgt] + 1 : tgt + 1;
+      };
+      if (op === "LOADI") R[a] = +b;
+      else if (op === "MOV") R[a] = val(b);
+      else if (op === "PUSH") stack.push(val(a));
+      else if (op === "POP") R[a] = stack.length ? stack.pop() : 0;
+      else if (op === "ADD") R[a] = val(a) + val(b);
+      else if (op === "SUB") R[a] = val(a) - val(b);
+      else if (op === "MUL") R[a] = val(a) * val(b);
+      else if (op === "DIV") R[a] = Math.trunc(val(a) / val(b));
+      else if (op === "MOD") R[a] = val(a) % val(b);
+      else if (op === "OUTN") ev.out = val(a) + " ";
+      else if (op === "OUTC") ev.out = String.fromCharCode(val(a));
+      else if (op === "TONE") ev.tone = val(a);
+      else if (op === "IN") { R[a] = input || 0; ev.input = input || 0; }
+      else if (op === "SKIPZ") skipIf(val(a) === 0);
+      else if (op === "SKIPNZ") skipIf(val(a) !== 0);
+      else if (op === "SKIPLT") skipIf(val(a) < val(b));
+      else if (op === "SKIPGE") skipIf(val(a) >= val(b));
+      else if (op === "REPEAT_START") {
+        let f = frames[frames.length - 1];
+        if (!f || f.start !== pc) { f = { start: pc, left: +a }; frames.push(f); }
+        if (f.left > 0) f.left--;
+        else { frames.pop(); next = end[pc] + 1; }
+      }
+      else if (op === "REPEAT_WHILE") {
+        let f = frames[frames.length - 1];
+        if (!f || f.start !== pc) { f = { start: pc }; frames.push(f); }
+        if (val(a) === 0) { frames.pop(); next = end[pc] + 1; }
+      }
+      else if (op === "REPEAT_END") next = start[pc];
+      else if (op === "HALT") break;
+      pc = next;
+    }
+    return events;
+  }
+  function toneShot(v) {
+    const ac = AC();
+    const o = ac.createOscillator(); o.type = "sine";
+    o.frequency.value = Math.min(4000, Math.max(60, 440 * Math.pow(2, (v - 69) / 12)));
+    o.connect(env(ac, ac.currentTime + 0.02, 0.22, 0.55));
+    o.start(ac.currentTime + 0.02); o.stop(ac.currentTime + 0.6);
+  }
+  // Execute the program, then PERFORM the execution order: repeat blocks
+  // replay, skipped bars never sound, output lands when its bar is reached.
+  function runBars(bars, render, consoleEl, opts) {
+    if (playing) return;
+    opts = opts || {};
+    const events = execute(bars, opts.input);
+    const seqBars = events.map(e => bars[e.bar]);
+    const seqCells = events.map(e => render.cellSets[e.bar]);
+    let text = "";
+    const paint = (running, status) => {
+      consoleEl.innerHTML = '<span class="prompt">$ cadence run ' + (opts.label || "program.wav") +
+        "</span>\n" + text + (running ? '<span class="cursor">▌</span>' : "") +
+        (status ? '<span class="prompt">' + status + "</span>" : "");
+    };
+    if (opts.btn) opts.btn.disabled = true;
+    paint(true);
+    playBars(seqBars, seqCells, () => {
+      render.rows.forEach(r => r.classList.remove("now"));
+      if (opts.btn) opts.btn.disabled = false;
+      paint(false, "\n— " + events.length + " bars performed, halted");
+    }, i => {
+      const e = events[i];
+      render.rows.forEach(r => r.classList.remove("now"));
+      render.rows[e.bar].classList.add("now");
+      if (e.input !== undefined) text += "in: " + e.input + "\n";
+      if (e.out) text += e.out;
+      if (e.tone !== undefined) toneShot(e.tone);
+      paint(true);
+    });
+  }
 
   // ---- render: opcodes in action -----------------------------------------
   const EX_DATA = [
@@ -827,10 +957,10 @@
       hits: { 1:"K",5:"T1",9:"H",10:"H",11:"S",12:"H",13:"S",14:"H",15:"S",16:"H" } },
     { m: "LOADI R2, 10", d: "newline",
       hits: { 1:"K",5:"T2",9:"H",10:"H",11:"H",12:"H",13:"S",14:"H",15:"S",16:"H" } },
-    { m: "REPEAT_START 3", d: "count in the operand field", cap: "outer × 3 — rows",
-      hits: { 1:"C",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
-    { m: "REPEAT_START 3", d: "", cap: "inner × 3 — columns",
-      hits: { 1:"C",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"S" } },
+    { m: "REPEAT_START 2", d: "count in the operand field", cap: "outer × 2 — rows",
+      hits: { 1:"C",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"H" } },
+    { m: "REPEAT_START 2", d: "", cap: "inner × 2 — columns",
+      hits: { 1:"C",9:"H",10:"H",11:"H",12:"H",13:"H",14:"H",15:"S",16:"H" } },
     { m: "OUTC R1", d: "prints *", hits: { 1:"R",2:"R",5:"T1" } },
     { m: "REPEAT_END", d: "close the inner block", hits: { 1:"C",2:"C" } },
     { m: "OUTC R2", d: "end the row", hits: { 1:"R",2:"R",5:"T2" } },
@@ -866,7 +996,7 @@
   document.getElementById("exDataOut").innerHTML  = '<span class="prompt">output:</span> 9 7';
   document.getElementById("exArithOut").innerHTML = '<span class="prompt">output:</span> 35 3 5';
   document.getElementById("exCmpOut").innerHTML   = '<span class="prompt">output:</span> 8 3';
-  document.getElementById("exLoopsOut").innerHTML = '<span class="prompt">output:</span>\n***\n***\n***';
+  document.getElementById("exLoopsOut").innerHTML = '<span class="prompt">output:</span>\n**\n**';
 
   function el(tag, text) { const e = document.createElement(tag); e.textContent = text; return e; }
 
@@ -914,9 +1044,26 @@
   ];
   renderProgram(document.getElementById("bracesProg"), BRACES);
 
+  // ---- POC: Hi! -----------------------------------------------------------
+  const POC = [
+    { m: "LOADI R1, 72", d: "'H'",
+      hits: { 1:"K",5:"T1",9:"H",10:"S",11:"H",12:"H",13:"S",14:"H",15:"H",16:"H" } },
+    { m: "OUTC R1", d: "→ prints H", out: "H", hits: { 1:"R",2:"R",5:"T1" } },
+    { m: "LOADI R1, 105", d: "'i'",
+      hits: { 1:"K",5:"T1",9:"H",10:"S",11:"S",12:"H",13:"S",14:"H",15:"H",16:"S" } },
+    { m: "OUTC R1", d: "→ prints i", out: "i", hits: { 1:"R",2:"R",5:"T1" } },
+    { m: "LOADI R1, 33", d: "'!'",
+      hits: { 1:"K",5:"T1",9:"H",10:"H",11:"S",12:"H",13:"H",14:"H",15:"H",16:"S" } },
+    { m: "OUTC R1", d: "→ prints !", out: "!", hits: { 1:"R",2:"R",5:"T1" } },
+    { m: "HALT", d: "", hits: { 1:"C",4:"R" } },
+  ];
+  const pocR = renderBarRows(document.getElementById("pocProg"), POC);
+  const pocOut = document.getElementById("pocOut");
+  pocOut.innerHTML = '<span class="prompt">$ cadence run hi.wav</span>\nwaiting — press run';
+
   const traceEl = document.getElementById("trace");
   const seq = [1, 2];
-  for (let i = 0; i < 5; i++) seq.push(3, 4, 5, 6);
+  for (let i = 0; i < 3; i++) seq.push(3, 4, 5, 6);
   seq.push(3, 7);
   let prev = null;
   for (const b of seq) {
@@ -935,43 +1082,111 @@
     prev = b;
   }
 
-  // ---- audio engine -----------------------------------------------------
-  let ctx = null;
-  const AC = () => (ctx = ctx || new (window.AudioContext || window.webkitAudioContext)());
-
-  function noise(t, dur, filterType, freq, gain, ac) {
-    const len = Math.ceil(ac.sampleRate * dur);
-    const buf = ac.createBuffer(1, len, ac.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    const src = ac.createBufferSource(); src.buffer = buf;
-    const f = ac.createBiquadFilter(); f.type = filterType; f.frequency.value = freq;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(gain, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f); f.connect(g); g.connect(ac.destination);
-    src.start(t); src.stop(t + dur);
+  // ---- audio engine: 808/909-style synthesis ------------------------------
+  let ctx = null, master = null;
+  function AC() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -16; comp.ratio.value = 4;
+      comp.attack.value = 0.003; comp.release.value = 0.15;
+      const out = ctx.createGain(); out.gain.value = 0.85;
+      comp.connect(out); out.connect(ctx.destination);
+      master = comp;
+    }
+    return ctx;
   }
-  function thump(t, f0, f1, dur, gain, ac) {
-    const o = ac.createOscillator(); o.type = "sine";
-    o.frequency.setValueAtTime(f0, t);
-    o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.8);
+  let noiseBuf = null;
+  function noiseSrc(ac, t, dur) {
+    if (!noiseBuf) {
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 1.5, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    s.start(t); s.stop(t + dur + 0.05);
+    return s;
+  }
+  // gain node with an exponential decay envelope, wired to the master bus
+  function env(ac, t, peak, dur) {
     const g = ac.createGain();
-    g.gain.setValueAtTime(gain, t);
+    g.gain.setValueAtTime(peak, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(ac.destination);
-    o.start(t); o.stop(t + dur);
+    g.connect(master);
+    return g;
+  }
+  // the classic 6-square-oscillator metallic bank (hats & cymbals)
+  function metal(ac, t, dur, peak, hpFreq, bpFreq) {
+    const g = env(ac, t, peak, dur);
+    const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = hpFreq;
+    const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = bpFreq; bp.Q.value = 1;
+    bp.connect(hp); hp.connect(g);
+    [80, 120, 166.4, 217.2, 271.6, 328.4].forEach(fr => {
+      const o = ac.createOscillator(); o.type = "square"; o.frequency.value = fr;
+      o.connect(bp); o.start(t); o.stop(t + dur + 0.02);
+    });
+  }
+  let clipCurve = null;
+  function softClip(ac) {
+    if (!clipCurve) {
+      clipCurve = new Float32Array(256);
+      for (let i = 0; i < 256; i++) clipCurve[i] = Math.tanh(2.2 * (i / 128 - 1));
+    }
+    const ws = ac.createWaveShaper(); ws.curve = clipCurve;
+    return ws;
+  }
+  function tom(t, ac, f0) {
+    const o = ac.createOscillator(); o.type = "sine";
+    o.frequency.setValueAtTime(f0 * 1.5, t);
+    o.frequency.exponentialRampToValueAtTime(f0, t + 0.08);
+    o.connect(env(ac, t, 0.75, 0.35));
+    o.start(t); o.stop(t + 0.37);
+    const n = noiseSrc(ac, t, 0.015); // stick attack
+    const f = ac.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2500;
+    n.connect(f); f.connect(env(ac, t, 0.25, 0.015));
   }
   const VOICES = {
-    K:  (t, ac) => thump(t, 140, 42, 0.32, 0.9, ac),
-    S:  (t, ac) => { noise(t, 0.16, "bandpass", 1800, 0.55, ac); thump(t, 210, 160, 0.09, 0.3, ac); },
-    H:  (t, ac) => noise(t, 0.05, "highpass", 7500, 0.28, ac),
-    T1: (t, ac) => thump(t, 260, 190, 0.22, 0.55, ac),
-    T2: (t, ac) => thump(t, 200, 145, 0.24, 0.55, ac),
-    T3: (t, ac) => thump(t, 155, 110, 0.26, 0.55, ac),
-    FT: (t, ac) => thump(t, 115, 78, 0.3, 0.6, ac),
-    C:  (t, ac) => noise(t, 0.9, "highpass", 4200, 0.32, ac),
-    R:  (t, ac) => { noise(t, 0.4, "highpass", 5200, 0.16, ac); noise(t, 0.12, "bandpass", 3000, 0.14, ac); },
+    K: (t, ac) => { // pitch-enveloped sine through a soft clipper, plus a click
+      const o = ac.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(170, t);
+      o.frequency.exponentialRampToValueAtTime(48, t + 0.09);
+      const ws = softClip(ac);
+      o.connect(ws); ws.connect(env(ac, t, 1.0, 0.48));
+      o.start(t); o.stop(t + 0.5);
+      const n = noiseSrc(ac, t, 0.02);
+      const f = ac.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1500;
+      n.connect(f); f.connect(env(ac, t, 0.35, 0.02));
+    },
+    S: (t, ac) => { // two drum-head tones + a bright rattle
+      [185, 330].forEach((fr, i) => {
+        const o = ac.createOscillator(); o.type = "triangle";
+        o.frequency.setValueAtTime(fr * 1.4, t);
+        o.frequency.exponentialRampToValueAtTime(fr, t + 0.03);
+        o.connect(env(ac, t, i ? 0.22 : 0.32, 0.12));
+        o.start(t); o.stop(t + 0.14);
+      });
+      const n = noiseSrc(ac, t, 0.25);
+      const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1400;
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 6000; bp.Q.value = 0.7;
+      n.connect(hp); hp.connect(bp); bp.connect(env(ac, t, 0.65, 0.22));
+    },
+    H:  (t, ac) => metal(ac, t, 0.05, 0.4, 7000, 10000),
+    T1: (t, ac) => tom(t, ac, 240),
+    T2: (t, ac) => tom(t, ac, 180),
+    T3: (t, ac) => tom(t, ac, 135),
+    FT: (t, ac) => tom(t, ac, 95),
+    C: (t, ac) => { // metallic bank + noise wash, long decay
+      metal(ac, t, 1.1, 0.5, 5500, 9000);
+      const n = noiseSrc(ac, t, 1.2);
+      const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 4500;
+      n.connect(hp); hp.connect(env(ac, t, 0.3, 1.2));
+    },
+    R: (t, ac) => { // shorter metallic sustain + the stick ping
+      metal(ac, t, 0.55, 0.16, 6000, 9500);
+      const o = ac.createOscillator(); o.type = "sine"; o.frequency.value = 4000;
+      o.connect(env(ac, t, 0.12, 0.35));
+      o.start(t); o.stop(t + 0.37);
+    },
   };
 
   // Tempo = the VM's clock speed. It scales execution, never meaning.
@@ -979,32 +1194,39 @@
   const stepDur = () => 60 / bpm / 4; // one 16th-note step, in seconds
   let playing = false;
 
-  function playBars(bars, cellSets, done) {
+  function playBars(bars, cellSets, done, onBar) {
     if (playing) return;
     playing = true;
-    const STEP = stepDur(); // locked in for this run
     const ac = AC();
-    if (ac.state === "suspended") ac.resume();
-    const t0 = ac.currentTime + 0.08;
-    const timers = [];
-    bars.forEach((bar, b) => {
-      for (let s = 1; s <= 16; s++) {
-        const when = t0 + (b * 16 + s - 1) * STEP;
-        const v = bar.hits[s];
-        if (v && VOICES[v]) VOICES[v](when, ac);
-        timers.push(setTimeout(() => {
-          document.querySelectorAll(".cell.playing").forEach(c => c.classList.remove("playing"));
-          const set = cellSets[b][s];
-          (Array.isArray(set) ? set : [set]).forEach(c => c && c.classList.add("playing"));
-        }, (when - ac.currentTime) * 1000));
-      }
-    });
-    const total = (bars.length * 16 * STEP + 0.35) * 1000;
-    setTimeout(() => {
-      document.querySelectorAll(".cell.playing").forEach(c => c.classList.remove("playing"));
-      playing = false;
-      if (done) done();
-    }, total);
+    // Don't schedule ANYTHING until the audio clock is actually running —
+    // otherwise the visual timers march ahead of the sound.
+    const go = () => {
+      const STEP = stepDur(); // locked in for this run
+      const t0 = ac.currentTime + 0.08;
+      bars.forEach((bar, b) => {
+        if (onBar) setTimeout(() => onBar(b, bar),
+          (t0 + b * 16 * STEP - ac.currentTime) * 1000);
+        for (let s = 1; s <= 16; s++) {
+          const when = t0 + (b * 16 + s - 1) * STEP;
+          const v = bar.hits[s];
+          if (v && VOICES[v]) VOICES[v](when, ac);
+          setTimeout(() => {
+            document.querySelectorAll(".cell.playing").forEach(c => c.classList.remove("playing"));
+            const set = cellSets[b][s];
+            (Array.isArray(set) ? set : [set]).forEach(c => c && c.classList.add("playing"));
+          }, (when - ac.currentTime) * 1000);
+        }
+      });
+      setTimeout(() => {
+        document.querySelectorAll(".cell.playing").forEach(c => c.classList.remove("playing"));
+        playing = false;
+        if (done) done();
+      }, (bars.length * 16 * STEP + 0.35) * 1000);
+    };
+    if (ac.state === "suspended") {
+      const p = ac.resume();
+      if (p && p.then) p.then(go, go); else go();
+    } else go();
   }
 
   // ---- operand bit editor -------------------------------------------------
@@ -1076,18 +1298,19 @@
     bpmMode.textContent = bpm <= 70 ? "debug" : bpm <= 160 ? "normal" : "sprint";
     document.getElementById("anatomyHint").textContent =
       "♩ = " + bpm + " · one bar · snare = 1, closed hat = an audible 0";
-    const secs = Math.round(PROGRAM.length * 16 * stepDur());
+    const execLen = execute(PROGRAM).length;
+    const secs = Math.round(execLen * 16 * stepDur());
     document.getElementById("programHint").textContent =
-      PROGRAM.length + " bars · " + secs + " seconds at ♩ = " + bpm;
+      PROGRAM.length + " written bars → " + execLen + " performed · " + secs + " seconds at ♩ = " + bpm;
+    document.getElementById("pocHint").textContent =
+      "7 bars · " + Math.round(7 * 16 * stepDur()) + " seconds at ♩ = " + bpm +
+      " — slow the tempo and watch the letters land late";
   }
   bpmSlider.addEventListener("input", updateTempo);
   updateTempo();
 
   document.getElementById("playAnatomy").addEventListener("click", () =>
     playBars([ANATOMY], [anatomyCells]));
-
-  document.getElementById("playProgram").addEventListener("click", () =>
-    playBars(PROGRAM, progCells));
 
   // ---- input demo ---------------------------------------------------------
   const inBitsEl = document.getElementById("inBits");
@@ -1132,19 +1355,20 @@
   document.getElementById("inTypedGo").addEventListener("click", submitTyped);
   inTyped.addEventListener("keydown", e => { if (e.key === "Enter") submitTyped(); });
 
-  document.getElementById("playBig").addEventListener("click", () => playBars(EX_BIG, exBigR.cellSets));
-  document.getElementById("playData").addEventListener("click", () => playBars(EX_DATA, exDataR.cellSets));
-  document.getElementById("playArith").addEventListener("click", () => playBars(EX_ARITH, exArithR.cellSets));
-  document.getElementById("playCmp").addEventListener("click", () => playBars(EX_CMP, exCmpR.cellSets));
-  document.getElementById("playLoops").addEventListener("click", () => playBars(EX_LOOPS, exLoopsR.cellSets));
-
-  document.getElementById("playCond").addEventListener("click", () => {
-    const skippedIdx = condOdd ? 4 : 6;
-    const bars = [], sets = [];
-    COND.forEach((bar, i) => {
-      if (i !== skippedIdx) { bars.push(bar); sets.push(condRender.cellSets[i]); }
-    });
-    playBars(bars, sets);
-  });
+  // every program panel runs through the VM: loops loop, skips skip
+  function bindRun(btnId, bars, render, outId, label, input) {
+    const btn = document.getElementById(btnId);
+    btn.addEventListener("click", () => runBars(bars, render, document.getElementById(outId), {
+      label, btn, input: typeof input === "function" ? input() : input,
+    }));
+  }
+  bindRun("playData", EX_DATA, exDataR, "exDataOut", "swap.wav");
+  bindRun("playArith", EX_ARITH, exArithR, "exArithOut", "digits.wav");
+  bindRun("playBig", EX_BIG, exBigR, "exBigOut", "bignum.wav");
+  bindRun("playCmp", EX_CMP, exCmpR, "exCmpOut", "maxmin.wav");
+  bindRun("playLoops", EX_LOOPS, exLoopsR, "exLoopsOut", "stars.wav");
+  bindRun("playProgram", PROGRAM, progR, "console", "countdown.wav");
+  bindRun("playCond", COND, condRender, "condConsole", "evenodd.wav", () => (condOdd ? 7 : 4));
+  bindRun("runPoc", POC, pocR, "pocOut", "hi.wav");
 })();
 </script>
