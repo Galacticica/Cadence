@@ -1,0 +1,32 @@
+{
+  "format": { "codec": "pcm_s16le", "sampleRate": 44100, "bitDepth": 16, "channels": 1 },
+  "kit": {
+    "K": { "file": "samples/kick.wav" },
+    "S": { "file": "samples/snare.wav" },
+    "H": { "file": "samples/hat-closed.wav" },
+    "T1": { "file": "samples/tom-hi.wav" },
+    "T2": { "file": "samples/tom-mid.wav" },
+    "T3": { "file": "samples/tom-low.wav" },
+    "FT": { "file": "samples/tom-floor.wav" },
+    "C": { "file": "samples/crash.wav" },
+    "R": { "file": "samples/ride.wav" },
+    "CLICK": { "file": "samples/stick.wav" }
+  },
+  "tone": { "file": "tone/marimba-c4.wav", "baseMidi": 60 },
+  "attributions": [
+    {
+      "files": "samples/*.wav",
+      "source": "SM Drums — Deeply Sampled Free Drums for the Masses",
+      "authors": "Scott McLean, Tod Stillwell, Suleiman Ali",
+      "url": "https://github.com/sfzinstruments/SMDrums",
+      "license": "Public domain (per the sfzinstruments directory listing)"
+    },
+    {
+      "files": "tone/marimba-c4.wav",
+      "source": "Versilian Community Sample Library (VCSL)",
+      "authors": "Versilian Studios LLC & contributors",
+      "url": "https://github.com/sgossner/VCSL",
+      "license": "CC0 1.0"
+    }
+  ]
+}

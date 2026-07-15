@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+# raw sample downloads: 11 MB, re-fetchable via packages/kit/ATTRIBUTIONS.md;
+# the processed canonical bytes in samples/ and tone/ ARE committed
+packages/kit/raw/

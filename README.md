@@ -78,28 +78,49 @@ plus `REPEAT_WHILE` and the skips make a Minsky counter machine.
 - **[SPEC.md](SPEC.md)** — the full language specification: alphabet, all 21
   opcodes, control-flow rules, worked examples for every instruction, the audio
   format, and the decoding pipeline.
-- **[diagram.html](diagram.html)** — an interactive explainer with a playable
-  sequencer grid, every opcode demonstrated in a runnable mini-program, an
-  interactive if/else demo, and a tempo dial. Open it in a browser and press
-  play — the drums are synthesized live.
+- **The sequencer IDE** — compose on the grid, run with live console output,
+  Save renders a real `.wav` with count-in, Open decodes one back:
+
+  ```
+  npm install
+  npm run dev        # → http://localhost:5173
+  ```
+
+- **The CLI** — the language independent of its IDE:
+
+  ```
+  npm run build -w @cadence/cli
+  node apps/cli/dist/cadence.js run examples/countdown.wav      # → 5 4 3 2 1
+  node apps/cli/dist/cadence.js check examples/countdown.wav
+  echo 0 | node apps/cli/dist/cadence.js run examples/truth-machine.wav
+  ```
+
+- **[diagram.html](diagram.html)** — the original interactive explainer with a
+  playable sequencer grid and every opcode demonstrated in a runnable
+  mini-program. (Historical: it still uses the old synthesized drums; the real
+  app plays the sampled kit below.)
 
 ## Status
 
-**Design phase — the language is fully specified; the implementation is next.**
-
-Planned as a TypeScript monorepo with one shared core:
+**Milestones v1 + v2 are implemented** — the loop closes, and the CLI exists:
 
 ```
-packages/core/     measure parser, VM, wav encoder + decoder
-apps/web/          sequencer IDE (the editor is a drum machine, not a text editor)
-apps/cli/          cadence run beat.wav
-apps/vscode-ext/   opening a Cadence .wav shows the sequencer
+packages/core/     types, parser, VM (BigInt registers), wav encoder + decoder
+packages/kit/      the canonical sample kit — real acoustic drums (SM Drums,
+                   public domain) + a VCSL marimba for TONE; frozen bytes shared
+                   by the IDE, the encoder, and the decoder's template matching
+apps/web/          Vite sequencer IDE (the editor is a drum machine, not a text editor)
+apps/cli/          cadence run beat.wav · cadence check beat.wav
+apps/vscode-ext/   (next) opening a Cadence .wav shows the sequencer
 ```
 
-Roadmap: **v1** closes the loop (compose on the grid → run → save renders a real
-.wav with a count-in → open decodes it back), then the CLI, the VS Code
-extension, live e-kit recording over Web MIDI, and eventually decoding clean
-acoustic recordings.
+Every sound is a recorded sample — no synthesis. `examples/` holds golden
+renders; `npm test` runs 71 tests including the byte-deterministic
+encode → decode → encode round-trip at multiple tempos, the template-
+separability confusion matrix, and all SPEC §6 programs on the VM.
+
+Remaining roadmap: the VS Code extension, live e-kit recording over Web MIDI,
+and eventually decoding clean acoustic recordings (SPEC §8 v2/v3 classifiers).
 
 ## FAQ
 

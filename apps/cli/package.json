@@ -1,0 +1,19 @@
+{
+  "name": "@cadence/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cadence": "./dist/cadence.js"
+  },
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@cadence/core": "*",
+    "@cadence/kit": "*"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1"
+  }
+}

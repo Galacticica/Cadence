@@ -1,0 +1,16 @@
+{
+  "name": "@cadence/kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/node.ts",
+    "./node": "./src/node.ts",
+    "./manifest": "./src/manifest.ts",
+    "./assets": "./src/assets.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@cadence/core": "*"
+  }
+}
