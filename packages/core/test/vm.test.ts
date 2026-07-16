@@ -145,6 +145,64 @@ describe("control-flow details", () => {
   });
 });
 
+describe("run() generator API", () => {
+  it("barEvents traces the execution order, loops included", () => {
+    const events = runToCompletion(parse(assemble(COUNTDOWN.slice(0, 7))), [], {
+      barEvents: true,
+    });
+    const bars = events.filter((e) => e.type === "bar").map((e) => e.bar);
+    // 2 loads, then the while-block (3,4,5,6) five times, the failing
+    // re-check of bar 3, and HALT at bar 7
+    expect(bars).toEqual([
+      1, 2,
+      3, 4, 5, 6,
+      3, 4, 5, 6,
+      3, 4, 5, 6,
+      3, 4, 5, 6,
+      3, 4, 5, 6,
+      3, 7,
+    ]);
+  });
+
+  it("resuming an input event with no value defaults the register to 0", () => {
+    const program = parse(
+      assemble([
+        { opcode: "IN", rd: 2 },
+        { opcode: "OUTN", rd: 2 },
+      ]),
+    );
+    const gen = run(program);
+    expect(gen.next().value).toMatchObject({ type: "input", reg: 2 });
+    expect(gen.next().value).toMatchObject({ type: "outN", value: 0n });
+  });
+
+  it("maxBars stops silently without a halt event", () => {
+    const looper = parse(
+      assemble([
+        { opcode: "LOADI", rd: 1, imm: 1 },
+        { opcode: "REPEAT_WHILE", rd: 1 },
+        { opcode: "REPEAT_END" },
+      ]),
+    );
+    const events = runToCompletion(looper, [], { maxBars: 10 });
+    expect(events.some((e) => e.type === "halt")).toBe(false);
+  });
+});
+
+describe("renderOutput", () => {
+  it("renders numbers with trailing spaces and codepoints as characters", () => {
+    expect(
+      renderOutput([
+        { type: "outN", value: 42n, bar: 1 },
+        { type: "outC", codepoint: 0x2764, bar: 2 }, // ❤
+        { type: "outN", value: -7n, bar: 3 },
+        { type: "tone", midi: 60, bar: 4 }, // silent in text output
+        { type: "halt", bar: 5 },
+      ]),
+    ).toBe("42 ❤-7 ");
+  });
+});
+
 describe("runtime errors", () => {
   it("throws on division by zero, with the bar number", () => {
     const instrs: Instruction[] = [

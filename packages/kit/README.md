@@ -11,6 +11,8 @@ These bytes are **canonical, not cosmetic** (SPEC §8): the same files are
 
 All content is public domain / CC0 — see [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 Format: 44.1 kHz, 16-bit, mono WAV; onset at sample 0; peak −6 dBFS.
+The encoder mixes real hits at `MIX_GAIN` (0.8) and ghost notes at
+`GHOST_GAIN` (0.35) — the decoder separates the two layers by that level gap.
 
 | Entry | Use |
 |---|---|

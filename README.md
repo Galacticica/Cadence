@@ -83,7 +83,10 @@ plus `REPEAT_WHILE` and the skips make a Minsky counter machine.
   opcodes, control-flow rules, worked examples for every instruction, the audio
   format, and the decoding pipeline.
 - **The sequencer IDE** — compose on the grid, run with live console output,
-  Save renders a real `.wav` with count-in, Open decodes one back:
+  Save renders a real `.wav` with count-in, Open decodes one back.
+  Shift-click paints **ghost notes** (quiet decoration hits that never affect
+  the program), and `IN` pauses the machine so you can **drum your input in
+  binary** — snare = 1, hat = 0, crash submits:
 
   ```
   npm install
@@ -119,9 +122,12 @@ apps/vscode-ext/   (next) opening a Cadence .wav shows the sequencer
 ```
 
 Every sound is a recorded sample — no synthesis. `examples/` holds golden
-renders; `npm test` runs 75 tests including the byte-deterministic
+renders; `npm test` runs 117 tests including the byte-deterministic
 encode → decode → encode round-trip at multiple tempos, the template-
-separability confusion matrix, and all SPEC §6 programs on the VM.
+separability confusion matrix, all SPEC §6 programs on the VM, and the
+ghost-note guarantee: a program saved with decoration reloads as the same
+program with the same output. `packages/core/README.md` documents the full
+API.
 
 Remaining roadmap: the VS Code extension, live e-kit recording over Web MIDI,
 and eventually decoding clean acoustic recordings (SPEC §8 v2/v3 classifiers).
