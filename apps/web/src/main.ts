@@ -13,6 +13,8 @@ import {
   parse,
   run,
   stepSeconds,
+  GHOST_GAIN,
+  MIX_GAIN,
   RuntimeError,
   type DrumSymbol,
   type Grid,
@@ -28,6 +30,9 @@ import { KitAudio, type LoadedAudio } from "./audio.js";
 import { EXAMPLES } from "./examples.js";
 import "./style.css";
 
+/** Playback gain for ghost notes, relative to real hits. */
+const GHOST_PLAY_GAIN = GHOST_GAIN / MIX_GAIN;
+
 // ---- lanes (top to bottom, like the explainer's anatomy diagram) ----------
 const LANES: { sym: DrumSymbol; label: string }[] = [
   { sym: "C", label: "Crash" },
@@ -42,7 +47,7 @@ const LANES: { sym: DrumSymbol; label: string }[] = [
 ];
 
 // ---- state -----------------------------------------------------------------
-let grid: Grid = assemble(EXAMPLES["Countdown (5 4 3 2 1)"]!);
+let grid: Grid = assemble(EXAMPLES["Countdown (5 4 3 2 1)"]!.instrs);
 let bpm = 120;
 let program: Program = parse(grid);
 let loaded: LoadedAudio | null = null;
@@ -62,6 +67,8 @@ let consoleStatus = "";
 let consoleRunning = false;
 
 function paintConsole(): void {
+  // cap so an infinite program (looping is legal!) can't bloat the DOM
+  if (consoleText.length > 4000) consoleText = "…" + consoleText.slice(-4000);
   const el = document.getElementById("console")!;
   el.innerHTML =
     `<span class="prompt">$ cadence run program.wav</span>\n` +
@@ -180,6 +187,9 @@ class Runner {
           ),
         );
       });
+      measure.ghosts?.forEach((hits, s) => {
+        for (const sym of hits) audio.play(sym, t + s * stepDur, GHOST_PLAY_GAIN);
+      });
     }
     // console + tone land at the top of the bar
     this.timeouts.push(
@@ -190,6 +200,7 @@ class Runner {
             if (e.type === "outN") consoleText += `${e.value} `;
             else if (e.type === "outC")
               consoleText += safeFromCodePoint(e.codepoint);
+            else if (e.type === "tone") consoleText += `♪${e.midi} `;
             else if (e.type === "fedInput") consoleText += `in: ${e.value}\n`;
           }
           paintConsole();
@@ -241,10 +252,24 @@ class Runner {
         }
         barsPerformed++;
         await this.scheduleChunk(chunk, this.nextTime);
+        if (barsPerformed === 33) {
+          // long run: reassure — infinite loops are a Cadence feature
+          const at = this.nextTime;
+          this.timeouts.push(
+            window.setTimeout(
+              () => {
+                consoleText +=
+                  "\n— still running: loops are legal in Cadence · ■ stop to interrupt\n";
+                paintConsole();
+              },
+              Math.max(0, (at - audio.now()) * 1000),
+            ),
+          );
+        }
         this.nextTime += this.barSeconds();
         if (chunk.needsInput) {
           this.state = "awaiting-input";
-          promptForInput(chunk.needsInput, (value) => {
+          promptForInput(chunk.needsInput, chunk.bar, (value) => {
             // finish the interrupted bar, then carry on
             this.resumeWith(value);
           });
@@ -333,12 +358,62 @@ function takeQueuedInput(): bigint | null {
   }
 }
 
-function promptForInput(reg: Register, submit: (v: bigint) => void): void {
+/**
+ * The IN pause panel (SPEC §7): the machine stops and listens. Drum the
+ * number in binary — snare = 1, hat = 0, MSB first, crash submits (a crash
+ * with no bits submits 0) — or just type it.
+ */
+function promptForInput(reg: Register, bar: number, submit: (v: bigint) => void): void {
   const box = document.getElementById("inputPrompt")!;
   box.classList.add("visible");
-  box.innerHTML = `<label>IN → R${reg}: <input id="inValue" type="text" inputmode="numeric" placeholder="number" /></label> <button id="inSubmit">crash ⟶ submit</button>`;
+  consoleText += `… machine paused, waiting for input (IN → R${reg})\n`;
+  paintConsole();
+  document.querySelector(`.bar[data-bar="${bar}"]`)?.classList.add("awaiting");
+
+  let bits = "";
+  box.innerHTML = `
+    <div class="inhead">⏸ machine paused — drumming a number into <strong>R${reg}</strong></div>
+    <div class="inrow">
+      <button id="inBit1" class="btn drum">Snare = 1</button>
+      <button id="inBit0" class="btn drum">Hat = 0</button>
+      <button id="inBack" class="btn drum" title="remove last bit">⌫</button>
+      <button id="inCrash" class="btn drum crash">🔊 Crash — submit</button>
+      <span id="inReadout" class="inreadout">—</span>
+    </div>
+    <div class="inrow">
+      <span class="inlabel">or type it:</span>
+      <input id="inValue" type="text" inputmode="numeric" placeholder="number · Enter submits" />
+      <span class="inhint">keys: s = 1 · h = 0 · backspace · c or Enter = crash</span>
+    </div>`;
+
+  const readout = (): void => {
+    document.getElementById("inReadout")!.textContent = bits.length
+      ? `${bits.split("").join(" ")} = ${BigInt("0b" + bits)}`
+      : "—";
+  };
+  const playSym = (sym: "S" | "H" | "C"): void => {
+    void ensureAudio().then(({ audio }) => audio.play(sym));
+  };
+  const addBit = (b: "0" | "1"): void => {
+    if (bits.length >= 64) return;
+    bits += b;
+    playSym(b === "1" ? "S" : "H");
+    readout();
+  };
   const input = document.getElementById("inValue") as HTMLInputElement;
-  const done = (): void => {
+
+  const finish = (v: bigint): void => {
+    document.querySelectorAll(".bar.awaiting").forEach((n) => n.classList.remove("awaiting"));
+    box.classList.remove("visible");
+    box.innerHTML = "";
+    document.removeEventListener("keydown", onKeys, true);
+    submit(v);
+  };
+  const submitDrummed = (): void => {
+    playSym("C");
+    finish(bits ? BigInt("0b" + bits) : 0n);
+  };
+  const submitTyped = (): void => {
     let v: bigint;
     try {
       v = BigInt(input.value.trim() || "0");
@@ -346,27 +421,70 @@ function promptForInput(reg: Register, submit: (v: bigint) => void): void {
       input.select();
       return;
     }
-    box.classList.remove("visible");
-    box.innerHTML = "";
-    submit(v);
+    finish(v);
   };
-  document.getElementById("inSubmit")!.addEventListener("click", done);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") done();
+
+  const onKeys = (e: KeyboardEvent): void => {
+    if (e.target === input) {
+      if (e.key === "Enter") submitTyped();
+      return; // typing in the field never triggers drum keys
+    }
+    const k = e.key.toLowerCase();
+    if (k === "s") addBit("1");
+    else if (k === "h") addBit("0");
+    else if (e.key === "Backspace") {
+      bits = bits.slice(0, -1);
+      readout();
+    } else if (k === "c" || e.key === "Enter") submitDrummed();
+    else return;
+    e.preventDefault();
+  };
+  document.addEventListener("keydown", onKeys, true);
+
+  document.getElementById("inBit1")!.addEventListener("click", () => addBit("1"));
+  document.getElementById("inBit0")!.addEventListener("click", () => addBit("0"));
+  document.getElementById("inBack")!.addEventListener("click", () => {
+    bits = bits.slice(0, -1);
+    readout();
   });
-  input.focus();
+  document.getElementById("inCrash")!.addEventListener("click", submitDrummed);
+
+  box.scrollIntoView({ behavior: "smooth", block: "center" });
   updateToolbar();
 }
 
 // ---- grid editing -----------------------------------------------------------
-function toggleCell(bar: number, step: number, sym: DrumSymbol): void {
-  const hits = grid[bar]!.steps[step]!;
+const removeFrom = (hits: Step | undefined, sym: DrumSymbol): boolean => {
+  if (!hits) return false;
   const i = hits.indexOf(sym);
   if (i >= 0) hits.splice(i, 1);
-  else hits.push(sym);
+  return i >= 0;
+};
+
+/** Plain click toggles a real hit; ghost=true (shift/right-click) a ghost. */
+function toggleCell(bar: number, step: number, sym: DrumSymbol, ghost: boolean): void {
+  const measure = grid[bar]!;
+  let added = false;
+  if (ghost) {
+    measure.ghosts ??= Array.from({ length: 16 }, () => [] as Step);
+    if (!removeFrom(measure.ghosts[step], sym)) {
+      removeFrom(measure.steps[step], sym); // a cell can't be both
+      measure.ghosts[step]!.push(sym);
+      added = true;
+    }
+    // keep the convention: ghosts present only when it has hits
+    if (measure.ghosts.every((s) => s.length === 0)) delete measure.ghosts;
+  } else if (!removeFrom(measure.steps[step], sym)) {
+    removeFrom(measure.ghosts?.[step], sym);
+    if (measure.ghosts?.every((s) => s.length === 0)) delete measure.ghosts;
+    measure.steps[step]!.push(sym);
+    added = true;
+  }
   reparse();
   renderEditor();
-  if (i < 0 && loaded) loaded.audio.play(sym); // audible feedback on add
+  if (added && loaded) {
+    loaded.audio.play(sym, 0, ghost ? GHOST_PLAY_GAIN : 1); // audible feedback
+  }
 }
 
 function reparse(): void {
@@ -469,12 +587,22 @@ function renderBar(measure: MeasureGrid, b: number): HTMLElement {
     row.appendChild(el("span", "lanelabel", lane.label));
     for (let s = 0; s < 16; s++) {
       const hits = measure.steps[s]!;
-      const cell = el("button", `cell ${fieldClass(s)}${hits.includes(lane.sym) ? " on" : ""}`);
+      const ghostHits = measure.ghosts?.[s];
+      const cell = el(
+        "button",
+        `cell ${fieldClass(s)}${hits.includes(lane.sym) ? " on" : ""}${
+          ghostHits?.includes(lane.sym) ? " ghost" : ""
+        }`,
+      );
       cell.dataset["bar"] = String(b + 1);
       cell.dataset["step"] = String(s);
       if (s % 4 === 0) cell.classList.add("beat");
-      cell.title = `${lane.label} · step ${s + 1}`;
-      cell.addEventListener("click", () => toggleCell(b, s, lane.sym));
+      cell.title = `${lane.label} · step ${s + 1} — click: hit · shift-click: ghost note`;
+      cell.addEventListener("click", (e) => toggleCell(b, s, lane.sym, e.shiftKey));
+      cell.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        toggleCell(b, s, lane.sym, true);
+      });
       row.appendChild(cell);
     }
     table.appendChild(row);
@@ -597,21 +725,27 @@ function renderShell(): void {
   const inputQueue = document.createElement("input");
   inputQueue.type = "text";
   inputQueue.id = "inputQueue";
-  inputQueue.placeholder = "IN queue, e.g. 5 1 0";
-  inputQueue.title = "values consumed by IN instructions, in order";
+  inputQueue.placeholder = "IN answers (optional)";
+  inputQueue.title =
+    "Optional: numbers fed to IN instructions automatically (in order, e.g. “5 1 0”). Leave empty to get the pause-and-drum-it panel instead.";
 
   const examples = document.createElement("select");
   examples.id = "examples";
   examples.appendChild(new Option("examples…", ""));
-  for (const name of Object.keys(EXAMPLES)) examples.appendChild(new Option(name, name));
+  for (const [name, ex] of Object.entries(EXAMPLES)) {
+    const opt = new Option(name, name);
+    opt.title = ex.note;
+    examples.appendChild(opt);
+  }
   examples.addEventListener("change", () => {
     const name = examples.value;
-    if (!name) return;
-    grid = assemble(EXAMPLES[name]!);
+    const ex = EXAMPLES[name];
+    if (!ex) return;
+    grid = assemble(ex.instrs);
     reparse();
     renderEditor();
     consoleText = "";
-    consoleStatus = `— loaded example: ${name}`;
+    consoleStatus = `— loaded: ${name}\n  ${ex.note}`;
     paintConsole();
     examples.value = "";
   });
@@ -658,6 +792,13 @@ function renderShell(): void {
   });
   kitRow.append(clickPad, tonePad);
   app.appendChild(kitRow);
+
+  const legend = el(
+    "div",
+    "legend",
+    "click: hit · shift-click or right-click: ghost note — quieter, just for groove, never code",
+  );
+  app.appendChild(legend);
 
   const status = el("div", "status");
   status.id = "status";

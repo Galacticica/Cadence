@@ -27,6 +27,8 @@ export {
   encode,
   stepSeconds,
   DEFAULT_BPM,
+  MIX_GAIN,
+  GHOST_GAIN,
   type SampleKit,
   type EncodeOptions,
 } from "./encode.js";

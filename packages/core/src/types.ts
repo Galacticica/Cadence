@@ -22,7 +22,15 @@ export type Step = DrumSymbol[];
 
 /** One measure of 4/4: exactly 16 steps (SPEC §2). */
 export interface MeasureGrid {
+  /** The language layer — what the parser reads. */
   steps: Step[];
+  /**
+   * Ghost notes (SPEC §2 addendum): a decoration layer — any drum on any
+   * step, rendered ~9 dB quieter, NEVER semantic. The parser doesn't see
+   * this layer; the decoder separates it from real hits by amplitude.
+   * Present only when it contains at least one hit.
+   */
+  ghosts?: Step[];
 }
 
 /** A whole program as a grid, one measure per bar. */

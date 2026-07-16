@@ -93,6 +93,71 @@ describe("encode → decode round-trip (SPEC milestone v1, headless half)", () =
   });
 });
 
+describe("ghost notes (decoration layer)", () => {
+  const symbols: DrumSymbol[] = ["K", "S", "H", "T1", "T2", "T3", "FT", "C", "R"];
+  const emptySteps = () => Array.from({ length: 16 }, () => [] as DrumSymbol[]);
+
+  it("round-trips a ghost of every symbol on assorted steps", () => {
+    // 3 bars, ghosts spread so decays don't stack too deep
+    const bars = [symbols.slice(0, 3), symbols.slice(3, 6), symbols.slice(6)];
+    const grid: Grid = bars.map((syms) => {
+      const ghosts = emptySteps();
+      syms.forEach((sym, i) => ghosts[i * 5]!.push(sym));
+      return { steps: emptySteps(), ghosts };
+    });
+    // a HALT bar so trailing ghost-only bars aren't ambiguous with padding
+    grid.push(...assemble([{ opcode: "HALT" }]));
+    for (const bpm of [60, 120, 200]) {
+      const { grid: decoded } = decode(encode(grid, kit, { bpm }), kit);
+      expect(decoded, `bpm ${bpm}`).toEqual(grid);
+    }
+  });
+
+  it("ghosts never change the program: ghost kick in the opcode field, ghost snare in a live operand", () => {
+    const grid = assemble([
+      { opcode: "LOADI", rd: 1, imm: 72 },
+      { opcode: "OUTN", rd: 1 },
+      { opcode: "HALT" },
+    ]);
+    // decorate bar 1: ghost kick on step 2 (opcode field), ghost snare on
+    // step 11 (a LIVE operand bit position holding a hat = 0)
+    const ghosts = emptySteps();
+    ghosts[1]!.push("K");
+    ghosts[10]!.push("S");
+    grid[0] = { steps: grid[0]!.steps, ghosts };
+
+    const { grid: decoded } = decode(encode(grid, kit, { bpm: 120 }), kit);
+    expect(decoded).toEqual(grid);
+
+    const program = parse(decoded);
+    expect(program.errors).toEqual([]);
+    expect(program.lines[0]).toMatchObject({
+      kind: "code",
+      instr: { opcode: "LOADI", rd: 1, imm: 72 }, // still 72, not 76
+    });
+  });
+
+  it("round-trips a real hit and a ghost of a different drum on the same step", () => {
+    const grid = assemble([{ opcode: "OUTN", rd: 1 }, { opcode: "HALT" }]);
+    const ghosts = emptySteps();
+    ghosts[0]!.push("FT"); // ghost floor tom under the real ride downbeat
+    grid[0] = { steps: grid[0]!.steps, ghosts };
+    const { grid: decoded } = decode(encode(grid, kit, { bpm: 120 }), kit);
+    expect(decoded).toEqual(grid);
+  });
+
+  it("a ghost-only bar parses as groove", () => {
+    const ghosts = emptySteps();
+    ghosts[0]!.push("K");
+    ghosts[8]!.push("S");
+    const grid: Grid = [{ steps: emptySteps(), ghosts }];
+    grid.push(...assemble([{ opcode: "HALT" }]));
+    const { grid: decoded } = decode(encode(grid, kit, { bpm: 120 }), kit);
+    expect(decoded).toEqual(grid);
+    expect(parse(decoded).lines[0]).toMatchObject({ kind: "groove" });
+  });
+});
+
 describe("count-in handshake", () => {
   it("rejects audio with no count-in", () => {
     // two seconds of a 440 Hz sine — clearly not a Cadence program

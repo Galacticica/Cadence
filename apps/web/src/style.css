@@ -159,25 +159,81 @@ header .tag {
   color: var(--op);
 }
 
+.legend {
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .inputprompt {
   display: none;
-  margin: 0.4rem 0;
-  padding: 0.55rem 0.7rem;
-  border: 1.5px solid var(--imm);
-  border-radius: 10px;
+  margin: 0.6rem 0;
+  padding: 0.8rem 1rem;
+  border: 2px solid var(--op);
+  border-radius: 12px;
   background: var(--panel-2);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--op) 18%, transparent);
+  animation: pulse-border 1.2s ease-in-out infinite;
 }
 .inputprompt.visible {
   display: block;
 }
+@keyframes pulse-border {
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--op) 8%, transparent);
+  }
+}
+.inputprompt .inhead {
+  font-size: 1.02rem;
+  margin-bottom: 0.55rem;
+}
+.inputprompt .inrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.35rem 0;
+}
+.inputprompt .inlabel {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.inputprompt .inhint {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.btn.drum {
+  font-size: 0.95rem;
+  padding: 0.45rem 0.9rem;
+}
+.btn.drum.crash {
+  background: var(--op);
+  border-color: var(--op);
+  color: #fff;
+}
+.inreadout {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 6em;
+}
 .inputprompt input {
   font: inherit;
-  width: 9em;
-  padding: 0.25rem 0.45rem;
+  width: 13em;
+  padding: 0.32rem 0.5rem;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--hit-face);
   color: var(--ink);
+}
+
+.bar.awaiting {
+  animation: pulse-bar 1.2s ease-in-out infinite;
+}
+@keyframes pulse-bar {
+  50% {
+    box-shadow: 0 0 0 3px var(--imm);
+  }
 }
 
 /* ---- bars ---- */
@@ -275,6 +331,17 @@ header .tag {
   inset: 22%;
   border-radius: 50%;
   background: var(--hit-face);
+}
+.cell.ghost {
+  border-color: var(--muted);
+}
+.cell.ghost::after {
+  content: "";
+  position: absolute;
+  inset: 26%;
+  border-radius: 50%;
+  border: 2px dashed var(--muted);
+  background: transparent;
 }
 .cell.playing {
   box-shadow: 0 0 0 2px var(--op);

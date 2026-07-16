@@ -71,13 +71,23 @@ export class KitAudio {
     if (this.ctx.state === "suspended") await this.ctx.resume();
   }
 
-  /** Schedule one drum hit at absolute audio-clock time `when`. */
-  play(sym: KitSymbol, when = 0): void {
+  /**
+   * Schedule one drum hit at absolute audio-clock time `when`.
+   * `gain` scales the hit — ghost notes pass GHOST_GAIN/MIX_GAIN (≈0.44).
+   */
+  play(sym: KitSymbol, when = 0, gain = 1): void {
     const buffer = this.buffers.get(sym);
     if (!buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
-    src.connect(this.master);
+    if (gain !== 1) {
+      const g = this.ctx.createGain();
+      g.gain.value = gain;
+      src.connect(g);
+      g.connect(this.master);
+    } else {
+      src.connect(this.master);
+    }
     src.start(Math.max(when, this.ctx.currentTime));
   }
 

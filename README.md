@@ -45,6 +45,10 @@ A few things fall out of this design that we're quite pleased about:
 - **Comments are groove.** Closed hi-hat outside the operand field is ignored,
   and a bar with no opcode on the downbeat is pure decoration. Programs can
   *breathe* — and sound like actual beats.
+- **Ghost notes.** Any drum, on any step, played quietly (~9 dB down) is pure
+  decoration — even inside live fields. The decoder separates the language
+  from the groove by loudness, so your program can have a soft snare drag
+  right through its own operand bits and still mean exactly the same thing.
 - **Tempo is the clock speed.** It never changes what a program means, only how
   fast it runs. Turn it down to ♩=40 and you're single-stepping by ear —
   Cadence's native debugger.
@@ -115,7 +119,7 @@ apps/vscode-ext/   (next) opening a Cadence .wav shows the sequencer
 ```
 
 Every sound is a recorded sample — no synthesis. `examples/` holds golden
-renders; `npm test` runs 71 tests including the byte-deterministic
+renders; `npm test` runs 75 tests including the byte-deterministic
 encode → decode → encode round-trip at multiple tempos, the template-
 separability confusion matrix, and all SPEC §6 programs on the VM.
 

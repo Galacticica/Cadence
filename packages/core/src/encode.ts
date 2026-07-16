@@ -26,7 +26,13 @@ export const DEFAULT_BPM = 120;
 export const stepSeconds = (bpm: number): number => 60 / bpm / 4;
 
 /** Headroom so simultaneous hits don't clip (samples peak at −6 dBFS). */
-const MIX_GAIN = 0.8;
+export const MIX_GAIN = 0.8;
+/**
+ * Ghost notes render at this gain (~9 dB below full hits) — quiet enough
+ * that the decoder's fitted amplitude cleanly separates the two layers,
+ * loud enough to groove.
+ */
+export const GHOST_GAIN = 0.35;
 
 /**
  * Render `grid` to WAV bytes. Bar 0 of the output is the count-in (clicks on
@@ -41,14 +47,20 @@ export function encode(grid: Grid, kit: SampleKit, opts: EncodeOptions = {}): Ui
   const rate = CANONICAL_SAMPLE_RATE;
   const step = stepSeconds(bpm);
 
-  // Every hit: [global step index, sample]. Count-in first.
-  const events: [number, Float32Array][] = [];
-  for (const q of [0, 4, 8, 12]) events.push([q, kit.samples.CLICK]);
+  // Every hit: [global step index, sample, gain]. Count-in first.
+  const events: [number, Float32Array, number][] = [];
+  for (const q of [0, 4, 8, 12]) events.push([q, kit.samples.CLICK, MIX_GAIN]);
   grid.forEach((measure, b) => {
     measure.steps.forEach((hits, s) => {
       for (const sym of hits) {
         const sample = kit.samples[sym];
-        if (sample) events.push([(b + 1) * 16 + s, sample]);
+        if (sample) events.push([(b + 1) * 16 + s, sample, MIX_GAIN]);
+      }
+    });
+    measure.ghosts?.forEach((hits, s) => {
+      for (const sym of hits) {
+        const sample = kit.samples[sym];
+        if (sample) events.push([(b + 1) * 16 + s, sample, GHOST_GAIN]);
       }
     });
   });
@@ -62,9 +74,9 @@ export function encode(grid: Grid, kit: SampleKit, opts: EncodeOptions = {}): Ui
   }
 
   const mix = new Float32Array(length);
-  for (const [stepIndex, sample] of events) {
+  for (const [stepIndex, sample, gain] of events) {
     const at = Math.round(stepIndex * step * rate);
-    for (let i = 0; i < sample.length; i++) mix[at + i]! += sample[i]! * MIX_GAIN;
+    for (let i = 0; i < sample.length; i++) mix[at + i]! += sample[i]! * gain;
   }
 
   return encodeWav(mix, rate);

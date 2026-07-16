@@ -92,6 +92,20 @@ an opcode-field sequence that matches no defined instruction — is a **syntax e
 reported with its bar number (`bar 12: tom in opcode field`, `bar 7: unknown opcode
 K→C`).
 
+### Ghost notes
+
+Beyond hats and groove bars, **any drum on any step may appear as a *ghost
+note*: a hit played (and rendered) roughly 9 dB quieter than a full hit.**
+Ghost notes are pure decoration — the parser never sees them, they carry no
+semantics, and they may sit anywhere, including inside live opcode, register,
+and operand fields. They exist so programs can *groove*: a quiet snare drag
+under an operand, a soft kick pickup into a downbeat.
+
+This does not reintroduce velocity semantics (rejected in §11): loudness never
+changes what a program *means* — it only separates the language layer (full
+hits) from the decoration layer (ghosts). Editors keep the two layers
+distinct; the decoder tells them apart by level (§8).
+
 ---
 
 ## 3. Machine model
@@ -471,6 +485,9 @@ you literally play your input; at a keyboard you type it. Both feed the same
 - **Container:** WAV, 44.1 kHz, 16-bit PCM. This file *is* the program.
 - **Rendering:** the toolchain renders programs from a fixed built-in sample kit
   (one canonical sample per symbol), at the project tempo, one hit per grid step.
+  Full (language) hits render at a fixed reference level; **ghost notes (§2)
+  render ~9 dB below it**. The decoder classifies each detected hit as language
+  or decoration by its fitted amplitude relative to those two levels.
 - **Count-in handshake:** every rendered program begins with **four stick clicks
   on quarter notes** — one bar of count-in. The decoder derives tempo from the
   inter-click intervals and grid phase from the last click; the program's first
